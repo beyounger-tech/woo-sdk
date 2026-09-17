@@ -1,0 +1,36 @@
+.beyounger-card-form,
+.beyounger-card-form-block {
+	margin: 10px 0 0;
+	max-width: 760px;
+}
+
+.beyounger-card-form p,
+.beyounger-card-form-block p {
+	display: none;
+}
+
+.beyounger-card-form iframe,
+.beyounger-card-form-block iframe {
+	display: block;
+	width: 100%;
+	min-height: 90px;
+	border: 0;
+	overflow: hidden;
+}
+
+.wc-block-components-radio-control-accordion-content .beyounger-card-form-block {
+	margin-top: 12px;
+}
+
+.wc-block-components-radio-control-accordion-content:has(.beyounger-card-form-block) {
+	padding-bottom: 16px;
+}
+
+.wc-block-components-radio-control-accordion-option:has(.beyounger-card-form-block) {
+	min-height: 0;
+}
+
+[data-beyounger-card-wrapper="1"] {
+	z-index: 999999 !important;
+	pointer-events: auto;
+}
