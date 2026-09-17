@@ -3,7 +3,7 @@
  * Plugin Name: Woo Beyounger Payment
  * Plugin URI: https://beyounger.com/
  * Description: BeyoungerPay tokenized direct payment gateway for WooCommerce.
- * Version: 1.0.7
+ * Version: 1.0.8
  * Author: Carter Chen
  * Text Domain: woo-beyounger-payment
  * Domain Path: /languages
@@ -18,7 +18,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.7' );
+define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.8' );
 define( 'WOO_BEYOUNGER_PAYMENT_FILE', __FILE__ );
 define( 'WOO_BEYOUNGER_PAYMENT_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -600,7 +600,7 @@ function woo_beyounger_payment_config_update_keys() {
  * @return array
  */
 function woo_beyounger_payment_method_config_keys() {
-	$methods = array( 'card', 'paypal', 'google_pay', 'cash_app', 'apple_pay' );
+	$methods = array( 'card', 'paypal', 'google_pay', 'cash_app', 'apple_pay', 'card_to_crypto' );
 	$keys    = array();
 
 	foreach ( $methods as $method ) {
@@ -621,7 +621,7 @@ function woo_beyounger_payment_method_config_keys() {
  * @return string
  */
 function woo_beyounger_payment_sanitize_config_value( $key, $value ) {
-	if ( in_array( $key, array( 'enabled', 'debug', 'enabled_card', 'enabled_paypal', 'enabled_google_pay', 'enabled_cash_app', 'enabled_apple_pay' ), true ) ) {
+	if ( in_array( $key, array( 'enabled', 'debug', 'enabled_card', 'enabled_paypal', 'enabled_google_pay', 'enabled_cash_app', 'enabled_apple_pay', 'enabled_card_to_crypto' ), true ) ) {
 		$value = is_bool( $value ) ? ( $value ? 'yes' : 'no' ) : (string) $value;
 		return wc_string_to_bool( $value ) ? 'yes' : 'no';
 	}
@@ -686,6 +686,7 @@ add_action(
 				$gateways[] = 'WC_Gateway_Beyounger_Google_Pay';
 				$gateways[] = 'WC_Gateway_Beyounger_Cash_App';
 				$gateways[] = 'WC_Gateway_Beyounger_Apple_Pay';
+				$gateways[] = 'WC_Gateway_Beyounger_Card_To_Crypto';
 				return $gateways;
 			}
 		);
@@ -717,6 +718,7 @@ add_action(
 						$payment_method_registry->register( new WC_Gateway_Beyounger_Blocks( 'beyounger_google_pay' ) );
 						$payment_method_registry->register( new WC_Gateway_Beyounger_Blocks( 'beyounger_cash_app' ) );
 						$payment_method_registry->register( new WC_Gateway_Beyounger_Blocks( 'beyounger_apple_pay' ) );
+						$payment_method_registry->register( new WC_Gateway_Beyounger_Blocks( 'beyounger_card_to_crypto' ) );
 					}
 				);
 			}

@@ -4,7 +4,7 @@ Tags: woocommerce, payment, beyoungerpay
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.7
+Stable tag: 1.0.8
 License: GPLv2 or later
 
 BeyoungerPay tokenized direct payment gateway for WooCommerce.
@@ -48,7 +48,7 @@ The plugin sends this URL automatically as `notify_url` when creating a transact
 
 Browser callback URL:
 
-The plugin sends the WooCommerce order payment URL as `callback_url`, for example `https://your-domain.com/checkout/order-pay/123/?pay_for_order=true&key=wc_order_xxx`. This lets customers return to the same order and retry payment after backing out of Apple Pay, Google Pay, PayPal, Cash App, or 3DS flows.
+The plugin sends the WooCommerce order payment URL as `callback_url`, for example `https://your-domain.com/checkout/order-pay/123/?pay_for_order=true&key=wc_order_xxx`. This lets customers return to the same order and retry payment after backing out of Apple Pay, Google Pay, PayPal, Cash App, Card to crypto, or 3DS flows.
 
 If the upstream browser redirect drops WooCommerce's order key but still returns the Beyounger `order_id`, the plugin repairs the callback before WooCommerce renders the page. Paid orders are redirected to the order received page, and unpaid orders are redirected back to the keyed order payment page.
 
@@ -92,7 +92,7 @@ The top-level transaction parameter `CUSTOM_FD14` is also sent as `1` for a retu
 {
   "plugin": {
     "name": "woo-beyounger-payment",
-    "version": "1.0.7"
+    "version": "1.0.8"
   },
   "wordpress": {
     "site_url": "https://merchant.example/",
@@ -158,9 +158,24 @@ Example update body:
 
 Daily successful payment limits:
 
-Each BeyoungerPay method has its own single-order amount range. Credit Card, PayPal, Google Pay, Cash App, and Apple Pay default to 0 to 500. When the current order total is outside a method's range, that method is hidden from checkout. Leave either the minimum or maximum amount empty to disable that side of the range for that payment method.
+Each BeyoungerPay method has its own single-order amount range. Credit Card, PayPal, Google Pay, Cash App, Apple Pay, and Card to crypto default to 0 to 500. When the current order total is outside a method's range, that method is hidden from checkout. Leave either the minimum or maximum amount empty to disable that side of the range for that payment method.
 
-Each BeyoungerPay method has its own daily successful payment limit. Credit Card, PayPal, Google Pay, Cash App, and Apple Pay default to 5000. When a method's total successful paid amount exceeds that method's daily limit, that method is hidden from checkout for the rest of the day. Refunded amounts are subtracted from the successful paid total. Leave a limit empty to disable the limit for that payment method.
+Each BeyoungerPay method has its own daily successful payment limit. Credit Card, PayPal, Google Pay, Cash App, Apple Pay, and Card to crypto default to 5000. When a method's total successful paid amount exceeds that method's daily limit, that method is hidden from checkout for the rest of the day. Refunded amounts are subtracted from the successful paid total. Leave a limit empty to disable the limit for that payment method.
+
+Card to crypto:
+
+Card to crypto uses the Credit Card icon and redirects to the payment URL returned by BeyoungerPay. It does not display the hosted card form or submit card[token]. Transaction parameters are method_type=10, pay_method=C01, request_type=1, and 3ds_mode=1 by default.
+
+It is disabled by default, with a single-order range of 0 to 500 and a daily successful payment limit of 5000. It shares the existing credentials, environment, UTM and returning-customer rules, notification handling, and refund flow.
+
+The signed config GET and POST/PUT/PATCH endpoints support these Card to crypto fields:
+
+* enabled_card_to_crypto
+* title_card_to_crypto
+* description_card_to_crypto
+* min_order_amount_card_to_crypto
+* max_order_amount_card_to_crypto
+* successful_payment_limit_card_to_crypto
 
 == Signature Reference ==
 
@@ -177,6 +192,9 @@ Refund:
 `sha256(api_key + request_time + trade_email + transaction_no + amount)`
 
 == Changelog ==
+
+= 1.0.8 =
+* Add Card to crypto with classic and Blocks checkout, independent settings and limits, refunds, and signed config read/update support.
 
 = 1.0.7 =
 * Send `CUSTOM_FD14=1` for returning customers and `CUSTOM_FD14=0` for new customers in every payment transaction.

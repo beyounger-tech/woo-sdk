@@ -10,6 +10,7 @@
 		'beyounger_google_pay',
 		'beyounger_cash_app',
 		'beyounger_apple_pay',
+		'beyounger_card_to_crypto',
 	];
 	const tokenState = {
 		token: '',
