@@ -458,6 +458,55 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				),
 				'desc_tip'          => true,
 			),
+			'enabled_card_to_crypto' => array(
+				'title'   => __( 'Card to crypto', 'woo-beyounger-payment' ),
+				'type'    => 'checkbox',
+				'label'   => __( 'Show Card to crypto', 'woo-beyounger-payment' ),
+				'default' => 'no',
+			),
+			'title_card_to_crypto' => array(
+				'title'   => __( 'Card to crypto Title', 'woo-beyounger-payment' ),
+				'type'    => 'text',
+				'default' => __( 'Card to crypto', 'woo-beyounger-payment' ),
+			),
+			'description_card_to_crypto' => array(
+				'title'   => __( 'Card to crypto Description', 'woo-beyounger-payment' ),
+				'type'    => 'textarea',
+				'default' => __( 'Pay with Card to crypto through BeyoungerPay.', 'woo-beyounger-payment' ),
+			),
+			'min_order_amount_card_to_crypto' => array(
+				'title'             => __( 'Card to crypto Minimum Order Amount', 'woo-beyounger-payment' ),
+				'type'              => 'number',
+				'description'       => __( 'Hide Card to crypto when the current order total is below this amount. Default is 0; empty means no minimum.', 'woo-beyounger-payment' ),
+				'default'           => '0',
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '0.01',
+				),
+				'desc_tip'          => true,
+			),
+			'max_order_amount_card_to_crypto' => array(
+				'title'             => __( 'Card to crypto Maximum Order Amount', 'woo-beyounger-payment' ),
+				'type'              => 'number',
+				'description'       => __( 'Hide Card to crypto when the current order total is above this amount. Default is 500; empty means no maximum.', 'woo-beyounger-payment' ),
+				'default'           => '500',
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '0.01',
+				),
+				'desc_tip'          => true,
+			),
+			'successful_payment_limit_card_to_crypto' => array(
+				'title'             => __( 'Card to crypto Successful Payment Limit', 'woo-beyounger-payment' ),
+				'type'              => 'number',
+				'description'       => __( 'Hide Card to crypto when Card to crypto successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
+				'default'           => '5000',
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '0.01',
+				),
+				'desc_tip'          => true,
+			),
 			'debug'           => array(
 				'title'       => __( 'Debug Log', 'woo-beyounger-payment' ),
 				'type'        => 'checkbox',
@@ -2374,4 +2423,59 @@ class WC_Gateway_Beyounger_Apple_Pay extends WC_Gateway_Beyounger {
 	 * @var string
 	 */
 	protected $icon_file = 'apple-pay.svg';
+}
+
+/**
+ * Card to crypto method via BeyoungerPay.
+ */
+class WC_Gateway_Beyounger_Card_To_Crypto extends WC_Gateway_Beyounger {
+
+	/**
+	 * WooCommerce gateway ID.
+	 *
+	 * @var string
+	 */
+	protected $gateway_id = 'beyounger_card_to_crypto';
+
+	/**
+	 * Internal payment method key.
+	 *
+	 * @var string
+	 */
+	protected $variant_key = 'card_to_crypto';
+
+	/**
+	 * BeyoungerPay method_type value.
+	 *
+	 * @var string
+	 */
+	protected $method_type = '10';
+
+	/**
+	 * BeyoungerPay request_type value.
+	 *
+	 * @var string
+	 */
+	protected $request_type = '1';
+
+	/**
+	 * Default customer-facing title.
+	 *
+	 * @var string
+	 */
+	protected $default_title = 'Card to crypto';
+
+	/**
+	 * Default customer-facing description.
+	 *
+	 * @var string
+	 */
+	protected $default_description = 'Pay with Card to crypto through BeyoungerPay.';
+
+	/**
+	 * Logo asset filename.
+	 *
+	 * @var string
+	 */
+	protected $icon_file = 'card.svg';
 }
