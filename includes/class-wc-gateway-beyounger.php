@@ -194,7 +194,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			'utm_gate'        => array(
 				'title'       => __( 'UTM Visibility', 'woo-beyounger-payment' ),
 				'type'        => 'title',
-				'description' => __( 'BeyoungerPay payment methods are always restricted to whitelisted UTM traffic. Visitors without a matching UTM will not see these payment methods unless they qualify as returning customers.', 'woo-beyounger-payment' ),
+				'description' => __( 'Preferred Channel requires whitelisted UTM traffic or an eligible returning customer. Standard Channel also allows other visitors. All other payment method limits still apply.', 'woo-beyounger-payment' ),
 			),
 				'utm_whitelist'   => array(
 					'title'       => __( 'Allowed UTM Sources', 'woo-beyounger-payment' ),
@@ -218,6 +218,15 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'type'    => 'checkbox',
 				'label'   => __( 'Show Credit Card', 'woo-beyounger-payment' ),
 				'default' => 'yes',
+			),
+			'channel_card' => array(
+				'title'   => __( 'Credit Card Channel', 'woo-beyounger-payment' ),
+				'type'    => 'select',
+				'default' => 'preferred',
+				'options' => array(
+					'preferred' => __( 'Preferred Channel', 'woo-beyounger-payment' ),
+					'standard'  => __( 'Standard Channel', 'woo-beyounger-payment' ),
+				),
 			),
 			'title_card'      => array(
 				'title'   => __( 'Credit Card Title', 'woo-beyounger-payment' ),
@@ -268,6 +277,15 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'label'   => __( 'Show PayPal', 'woo-beyounger-payment' ),
 				'default' => 'no',
 			),
+			'channel_paypal' => array(
+				'title'   => __( 'PayPal Channel', 'woo-beyounger-payment' ),
+				'type'    => 'select',
+				'default' => 'preferred',
+				'options' => array(
+					'preferred' => __( 'Preferred Channel', 'woo-beyounger-payment' ),
+					'standard'  => __( 'Standard Channel', 'woo-beyounger-payment' ),
+				),
+			),
 			'title_paypal'    => array(
 				'title'   => __( 'PayPal Title', 'woo-beyounger-payment' ),
 				'type'    => 'text',
@@ -316,6 +334,15 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'type'    => 'checkbox',
 				'label'   => __( 'Show Google Pay', 'woo-beyounger-payment' ),
 				'default' => 'no',
+			),
+			'channel_google_pay' => array(
+				'title'   => __( 'Google Pay Channel', 'woo-beyounger-payment' ),
+				'type'    => 'select',
+				'default' => 'preferred',
+				'options' => array(
+					'preferred' => __( 'Preferred Channel', 'woo-beyounger-payment' ),
+					'standard'  => __( 'Standard Channel', 'woo-beyounger-payment' ),
+				),
 			),
 			'title_google_pay' => array(
 				'title'   => __( 'Google Pay Title', 'woo-beyounger-payment' ),
@@ -366,6 +393,15 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'label'   => __( 'Show Cash App', 'woo-beyounger-payment' ),
 				'default' => 'no',
 			),
+			'channel_cash_app' => array(
+				'title'   => __( 'Cash App Channel', 'woo-beyounger-payment' ),
+				'type'    => 'select',
+				'default' => 'preferred',
+				'options' => array(
+					'preferred' => __( 'Preferred Channel', 'woo-beyounger-payment' ),
+					'standard'  => __( 'Standard Channel', 'woo-beyounger-payment' ),
+				),
+			),
 			'title_cash_app'  => array(
 				'title'   => __( 'Cash App Title', 'woo-beyounger-payment' ),
 				'type'    => 'text',
@@ -415,6 +451,15 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'label'   => __( 'Show Apple Pay', 'woo-beyounger-payment' ),
 				'default' => 'no',
 			),
+			'channel_apple_pay' => array(
+				'title'   => __( 'Apple Pay Channel', 'woo-beyounger-payment' ),
+				'type'    => 'select',
+				'default' => 'preferred',
+				'options' => array(
+					'preferred' => __( 'Preferred Channel', 'woo-beyounger-payment' ),
+					'standard'  => __( 'Standard Channel', 'woo-beyounger-payment' ),
+				),
+			),
 			'title_apple_pay' => array(
 				'title'   => __( 'Apple Pay Title', 'woo-beyounger-payment' ),
 				'type'    => 'text',
@@ -463,6 +508,15 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'type'    => 'checkbox',
 				'label'   => __( 'Show Card to crypto', 'woo-beyounger-payment' ),
 				'default' => 'no',
+			),
+			'channel_card_to_crypto' => array(
+				'title'   => __( 'Card to Crypto Channel', 'woo-beyounger-payment' ),
+				'type'    => 'select',
+				'default' => 'preferred',
+				'options' => array(
+					'preferred' => __( 'Preferred Channel', 'woo-beyounger-payment' ),
+					'standard'  => __( 'Standard Channel', 'woo-beyounger-payment' ),
+				),
 			),
 			'title_card_to_crypto' => array(
 				'title'   => __( 'Card to crypto Title', 'woo-beyounger-payment' ),
@@ -531,7 +585,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			return false;
 		}
 
-			if ( ! $this->passes_utm_gate() ) {
+			if ( ! $this->is_standard_channel() && ! $this->passes_utm_gate() ) {
 				return false;
 			}
 
@@ -781,7 +835,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			'pay_method'   => $pay_method,
 			'method_type'  => $this->get_method_type(),
 			'3ds_mode'     => $this->get_three_ds_mode(),
-			'CUSTOM_FD14'     => $traffic['is_returning_customer'] ? '1' : '0',
+			'CUSTOM_FD14'     => $traffic['custom_fd14'],
 			'notify_url'   => $this->get_notify_url(),
 			'callback_url' => $this->get_callback_url( $order ),
 			'customer'     => array(
@@ -1684,6 +1738,24 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			return true;
 		}
 
+		return $this->matches_utm_whitelist();
+	}
+
+	/**
+	 * Whether this method allows visitors outside the preferred traffic rules.
+	 *
+	 * @return bool
+	 */
+	private function is_standard_channel() {
+		return 'standard' === $this->get_option( 'channel_' . $this->variant_key, 'preferred' );
+	}
+
+	/**
+	 * Check UTM whitelist membership independently of customer history.
+	 *
+	 * @return bool
+	 */
+	private function matches_utm_whitelist() {
 		$rules = $this->parse_utm_whitelist( $this->get_option( 'utm_whitelist', '' ) );
 		if ( empty( $rules ) ) {
 			return false;
@@ -1936,7 +2008,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		$order->update_meta_data( '_beyounger_traffic_source_type', $context['source_type'] );
 		$order->update_meta_data( '_beyounger_traffic_source', $context['source'] );
 		$order->update_meta_data( '_beyounger_is_returning_customer', $context['is_returning_customer'] ? 'yes' : 'no' );
-		$order->update_meta_data( '_beyounger_cus_fd14', $context['is_returning_customer'] ? '1' : '0' );
+		$order->update_meta_data( '_beyounger_cus_fd14', $context['custom_fd14'] );
 		$order->update_meta_data( '_beyounger_has_referer', '' !== $context['referer'] ? 'yes' : 'no' );
 
 		foreach ( array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content' ) as $key ) {
@@ -1984,6 +2056,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		$raw_utm              = function_exists( 'woo_beyounger_payment_get_current_raw_utm' ) ? woo_beyounger_payment_get_current_raw_utm() : $utm;
 		$referer              = function_exists( 'woo_beyounger_payment_get_current_referer' ) ? woo_beyounger_payment_get_current_referer() : '';
 		$is_returning_customer = $this->is_eligible_returning_customer();
+		$custom_fd14          = $is_returning_customer ? '1' : ( $this->is_standard_channel() && ! $this->matches_utm_whitelist() ? '2' : '0' );
 		$source_type          = 'unknown';
 		$source               = 'unknown';
 		$raw_utm              = array_map( 'sanitize_text_field', is_array( $raw_utm ) ? $raw_utm : array() );
@@ -2004,6 +2077,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			'source_type'           => $source_type,
 			'source'                => $source,
 			'is_returning_customer' => $is_returning_customer,
+			'custom_fd14'           => $custom_fd14,
 			'utm'                   => $utm,
 			'raw_utm'               => $raw_utm,
 			'referer'               => $referer,

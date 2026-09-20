@@ -4,7 +4,7 @@ Tags: woocommerce, payment, beyoungerpay
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.8
+Stable tag: 1.0.9
 License: GPLv2 or later
 
 BeyoungerPay tokenized direct payment gateway for WooCommerce.
@@ -54,7 +54,7 @@ If the upstream browser redirect drops WooCommerce's order key but still returns
 
 UTM visibility:
 
-BeyoungerPay methods are hidden unless the visitor matches a configured UTM source. One source is configured per line:
+Preferred Channel methods require a matching UTM whitelist rule or an eligible returning customer. Standard Channel also allows other visitors; all other availability checks and amount limits still apply. Each payment method has its own Channel setting, defaulting to Preferred Channel. One source is configured per line:
 
 `google`
 
@@ -192,6 +192,11 @@ Refund:
 `sha256(api_key + request_time + trade_email + transaction_no + amount)`
 
 == Changelog ==
+
+= 1.0.9 =
+* Add independent Preferred Channel and Standard Channel settings for all six payment methods.
+* Preserve returning-customer (CUSTOM_FD14=1) and whitelist (CUSTOM_FD14=0) priority; use CUSTOM_FD14=2 only for Standard Channel fallback traffic.
+* Support channel settings in signed configuration sync.
 
 = 1.0.8 =
 * Add Card to crypto with classic and Blocks checkout, independent settings and limits, refunds, and signed config read/update support.
