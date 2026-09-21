@@ -3,7 +3,7 @@
  * Plugin Name: Woo Beyounger Payment
  * Plugin URI: https://beyounger.com/
  * Description: BeyoungerPay tokenized direct payment gateway for WooCommerce.
- * Version: 1.0.9
+ * Version: 1.0.10
  * Author: Carter Chen
  * Text Domain: woo-beyounger-payment
  * Domain Path: /languages
@@ -18,7 +18,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.9' );
+define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.10' );
 define( 'WOO_BEYOUNGER_PAYMENT_FILE', __FILE__ );
 define( 'WOO_BEYOUNGER_PAYMENT_PATH', plugin_dir_path( __FILE__ ) );
 

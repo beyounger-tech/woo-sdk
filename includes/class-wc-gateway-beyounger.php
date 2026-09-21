@@ -849,6 +849,9 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 
 		if ( $this->is_card_gateway() && '' !== $card_token ) {
 			$payload['card[token]'] = $card_token;
+			if ( '2' === $traffic['custom_fd14'] ) {
+				$payload['allowed_card_brand'] = 'visa';
+			}
 		}
 
 		$payload['sign'] = $this->make_signature(
@@ -1453,6 +1456,10 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			'sandbox'      => $this->is_sandbox() ? '1' : '0',
 		);
 
+		if ( $this->is_card_gateway() && '2' === $this->get_customer_type_flag() ) {
+			$args['allowed_card_brand'] = 'visa';
+		}
+
 		$args['sign'] = $this->make_signature(
 			array(
 				$request_time,
@@ -1713,7 +1720,31 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 * @return string
 	 */
 	public function get_icon_url() {
-		return $this->icon;
+		if ( $this->is_card_gateway() && '2' === $this->get_customer_type_flag() ) {
+			return plugins_url( 'assets/visa.svg', WOO_BEYOUNGER_PAYMENT_FILE );
+		}
+		return plugins_url( 'assets/' . $this->icon_file, WOO_BEYOUNGER_PAYMENT_FILE );
+	}
+
+	/**
+	 * Resolve the classic checkout icon using the current visitor context.
+	 */
+	public function get_icon() {
+		$this->icon = $this->get_icon_url();
+		return parent::get_icon();
+	}
+
+	/**
+	 * Shared CUSTOM_FD14 classification for icons, card forms and payments.
+	 *
+	 * @param bool|null $is_returning_customer Previously resolved eligibility, if available.
+	 * @return string
+	 */
+	private function get_customer_type_flag( $is_returning_customer = null ) {
+		if ( null === $is_returning_customer ) {
+			$is_returning_customer = $this->is_eligible_returning_customer();
+		}
+		return $is_returning_customer ? '1' : ( $this->is_standard_channel() && ! $this->matches_utm_whitelist() ? '2' : '0' );
 	}
 
 	/**
@@ -2056,7 +2087,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		$raw_utm              = function_exists( 'woo_beyounger_payment_get_current_raw_utm' ) ? woo_beyounger_payment_get_current_raw_utm() : $utm;
 		$referer              = function_exists( 'woo_beyounger_payment_get_current_referer' ) ? woo_beyounger_payment_get_current_referer() : '';
 		$is_returning_customer = $this->is_eligible_returning_customer();
-		$custom_fd14          = $is_returning_customer ? '1' : ( $this->is_standard_channel() && ! $this->matches_utm_whitelist() ? '2' : '0' );
+		$custom_fd14          = $this->get_customer_type_flag( $is_returning_customer );
 		$source_type          = 'unknown';
 		$source               = 'unknown';
 		$raw_utm              = array_map( 'sanitize_text_field', is_array( $raw_utm ) ? $raw_utm : array() );

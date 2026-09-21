@@ -4,7 +4,7 @@ Tags: woocommerce, payment, beyoungerpay
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.9
+Stable tag: 1.0.10
 License: GPLv2 or later
 
 BeyoungerPay tokenized direct payment gateway for WooCommerce.
@@ -55,6 +55,8 @@ If the upstream browser redirect drops WooCommerce's order key but still returns
 UTM visibility:
 
 Preferred Channel methods require a matching UTM whitelist rule or an eligible returning customer. Standard Channel also allows other visitors; all other availability checks and amount limits still apply. Each payment method has its own Channel setting, defaulting to Preferred Channel. One source is configured per line:
+
+For Credit card, only ordinary visitors admitted by Standard Channel (`CUSTOM_FD14=2`) see `assets/visa.svg` and may use VISA cards only. Whitelisted visitors (`CUSTOM_FD14=0`) and eligible returning customers (`CUSTOM_FD14=1`) retain the original icon and supported card brands. The plugin sends `allowed_card_brand=visa` to both the hosted card form and the payment API. Deploy the matching gateway changes (cardform view, Payment controller, and Transaction/Main model) together with this plugin: the hosted form shows unsupported-card errors, and the gateway checks the restriction during tokenization and token consumption. Existing card-number checksum validation still applies. Preferred Channel keeps its existing card icon and supported brands.
 
 `google`
 
@@ -192,6 +194,10 @@ Refund:
 `sha256(api_key + request_time + trade_email + transaction_no + amount)`
 
 == Changelog ==
+
+= 1.0.10 =
+* Display the VISA icon only for Credit card visitors classified as CUSTOM_FD14=2.
+* Restrict only CUSTOM_FD14=2 credit card payments to VISA with matching gateway support; preserve other visitors' supported brands.
 
 = 1.0.9 =
 * Add independent Preferred Channel and Standard Channel settings for all six payment methods.
