@@ -11,6 +11,14 @@ BeyoungerPay tokenized direct payment gateway for WooCommerce.
 
 == Description ==
 
+Shipment tracking synchronization: changes to `_wc_shipment_tracking_items` enqueue background jobs for BeyoungerPay orders. New and changed items are posted to `/gateway/service/shipment`; deleted items are retained in the payment system. There is no historical scan or manual order action. Deploy the gateway shipment endpoint and source-ID/version schema migration first.
+
+The integration listens to WordPress post-meta and WooCommerce order-meta events, coalesces events within each request, and serializes work per order. It sends at most five changed items per job, with up to eight delayed retries (60 seconds, 180 seconds, 540 seconds, then increasing to a six-hour cap). Retries read the current order data. Background timing depends on the site's Action Scheduler/WP-Cron runner; this is asynchronous, not a guarantee of immediate delivery.
+
+New payment attempts store their environment and merchant email on the order. Orders without a saved environment default to live for shipment synchronization, regardless of the current plugin environment setting. There is no automatic fallback to sandbox; a successful sync saves the chosen environment. Shipment status and delivery time are not inferred from tracking numbers. Errors are logged under `beyounger-shipment-sync` without credentials or complete payloads. Orders awaiting a payment transaction number resume when it is recorded.
+
+The official Shipment Tracking formatter (`WC_Shipment_Tracking_Actions::get_instance()->get_tracking_items`) is used when available. Built-in carrier links must come from the formatter; unsupported versions log an error rather than inventing a URL. Custom carrier names receive a deterministic `custom_` code. Source tracking IDs must be present. Verify the installed Shipment Tracking/ShipStation version on a staging site; this repository does not include the paid extension.
+
 This plugin adds a BeyoungerPay payment method to WooCommerce.
 
 Implemented flows:
