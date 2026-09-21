@@ -22,6 +22,9 @@ define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.10' );
 define( 'WOO_BEYOUNGER_PAYMENT_FILE', __FILE__ );
 define( 'WOO_BEYOUNGER_PAYMENT_PATH', plugin_dir_path( __FILE__ ) );
 
+require_once WOO_BEYOUNGER_PAYMENT_PATH . 'includes/class-beyounger-shipment-sync.php';
+add_action( 'plugins_loaded', array( 'Beyounger_Shipment_Sync', 'init' ), 20 );
+
 /**
  * Enqueue compact frontend styles for hosted payment fields.
  */

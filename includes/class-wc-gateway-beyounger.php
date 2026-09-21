@@ -866,6 +866,8 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		);
 
 		$order->update_meta_data( '_beyounger_order_id', $order_id );
+		$order->update_meta_data( '_beyounger_environment', $payload['sandbox'] === '1' ? 'sandbox' : 'live' );
+		$order->update_meta_data( '_beyounger_trade_email', $payload['trade_email'] );
 		$order->update_meta_data( '_beyounger_payment_method', $this->variant_key );
 		$order->update_meta_data( '_beyounger_request_type', $this->get_request_type() );
 		$order->update_meta_data( '_beyounger_method_type', $this->get_method_type() );
