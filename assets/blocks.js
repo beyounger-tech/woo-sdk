@@ -179,16 +179,17 @@
 						gap: '8px',
 					},
 				},
-				settings.icon
-					? window.wp.element.createElement( 'img', {
-						src: settings.icon,
+				( settings.icons || ( settings.icon ? [ settings.icon ] : [] ) ).map( function ( icon ) {
+					return window.wp.element.createElement( 'img', {
+						key: icon,
+						src: icon,
 						alt: '',
 						style: {
 							height: '24px',
 							width: 'auto',
 						},
-					} )
-					: null,
+					} );
+				} ),
 				window.wp.element.createElement( 'span', null, label )
 			);
 		};

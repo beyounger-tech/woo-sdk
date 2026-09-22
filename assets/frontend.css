@@ -1,3 +1,16 @@
+.beyounger-card-icons {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+}
+.beyounger-card-icons img {
+	float: none !important;
+	height: 24px;
+	width: auto;
+	max-height: 24px;
+	margin: 0 !important;
+}
+
 .beyounger-card-form,
 .beyounger-card-form-block {
 	margin: 10px 0 0;

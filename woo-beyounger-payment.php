@@ -3,7 +3,7 @@
  * Plugin Name: Woo Beyounger Payment
  * Plugin URI: https://beyounger.com/
  * Description: BeyoungerPay tokenized direct payment gateway for WooCommerce.
- * Version: 1.0.10
+ * Version: 1.0.11
  * Author: Carter Chen
  * Text Domain: woo-beyounger-payment
  * Domain Path: /languages
@@ -18,7 +18,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.10' );
+define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.11' );
 define( 'WOO_BEYOUNGER_PAYMENT_FILE', __FILE__ );
 define( 'WOO_BEYOUNGER_PAYMENT_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -462,6 +462,7 @@ function woo_beyounger_payment_rest_get_config() {
 			'code' => 200,
 			'data' => array(
 				'plugin_version' => WOO_BEYOUNGER_PAYMENT_VERSION,
+				'supported_config_keys' => woo_beyounger_payment_config_update_keys(),
 				'site_url'       => home_url( '/' ),
 				'config_version' => isset( $settings['config_version'] ) ? (int) $settings['config_version'] : 0,
 				'updated_at'     => isset( $settings['config_updated_at'] ) ? (int) $settings['config_updated_at'] : 0,
@@ -494,22 +495,30 @@ function woo_beyounger_payment_rest_update_config( WP_REST_Request $request ) {
 		return new WP_Error( 'beyounger_config_site_mismatch', 'Incoming config site_url does not match this site.', array( 'status' => 403 ) );
 	}
 
-	if ( $incoming_version > 0 && $incoming_version < $current_version ) {
+	if ( $incoming_version > 0 && $incoming_version <= $current_version ) {
 		return new WP_Error( 'beyounger_config_stale_version', 'Incoming config version is older than the current config.', array( 'status' => 409 ) );
 	}
 
 	$updated = woo_beyounger_payment_merge_config( $settings, $config );
+	if ( is_wp_error( $updated ) ) {
+		return $updated;
+	}
 	$updated['config_version']        = $incoming_version > 0 ? $incoming_version : $current_version + 1;
 	$updated['config_updated_at']     = isset( $params['updated_at'] ) ? absint( $params['updated_at'] ) : time();
 	$updated['config_updated_source'] = 'beyounger';
 
 	update_option( 'woocommerce_beyounger_settings', $updated );
+	if ( get_option( 'woocommerce_beyounger_settings', array() ) !== $updated ) {
+		return new WP_Error( 'beyounger_config_save_failed', 'Configuration could not be verified after saving. Fetch it again before retrying.', array( 'status' => 500 ) );
+	}
 
 	return rest_ensure_response(
 		array(
 			'code' => 200,
 			'data' => array(
 				'config_version' => (int) $updated['config_version'],
+				'plugin_version' => WOO_BEYOUNGER_PAYMENT_VERSION,
+				'supported_config_keys' => woo_beyounger_payment_config_update_keys(),
 				'updated_at'     => (int) $updated['config_updated_at'],
 				'config'         => woo_beyounger_payment_export_config( $updated ),
 			),
@@ -539,6 +548,17 @@ function woo_beyounger_payment_site_url_matches( $site_url ) {
  * @return array
  */
 function woo_beyounger_payment_export_config( array $settings ) {
+	$settings = array_merge(
+		array(
+			'channel_card' => 'preferred',
+			'supported_card_types_preferred' => array( 'visa', 'mastercard', 'discover', 'amex' ),
+			'supported_card_types_standard' => array( 'visa' ),
+		),
+		$settings
+	);
+	foreach ( array( 'card', 'paypal', 'google_pay', 'cash_app', 'apple_pay', 'card_to_crypto' ) as $method ) {
+		$settings += array( 'successful_payment_limit_standard_' . $method => '' );
+	}
 	$config = array();
 	foreach ( woo_beyounger_payment_config_export_keys() as $key ) {
 		if ( array_key_exists( $key, $settings ) ) {
@@ -567,7 +587,11 @@ function woo_beyounger_payment_merge_config( array $settings, array $config ) {
 			continue;
 		}
 
-		$settings[ $key ] = woo_beyounger_payment_sanitize_config_value( $key, $config[ $key ] );
+		$value = woo_beyounger_payment_sanitize_config_value( $key, $config[ $key ] );
+		if ( is_wp_error( $value ) ) {
+			return $value;
+		}
+		$settings[ $key ] = $value;
 	}
 
 	return $settings;
@@ -604,10 +628,10 @@ function woo_beyounger_payment_config_update_keys() {
  */
 function woo_beyounger_payment_method_config_keys() {
 	$methods = array( 'card', 'paypal', 'google_pay', 'cash_app', 'apple_pay', 'card_to_crypto' );
-	$keys    = array();
+	$keys    = array( 'supported_card_types_preferred', 'supported_card_types_standard' );
 
 	foreach ( $methods as $method ) {
-		foreach ( array( 'enabled', 'channel', 'title', 'description', 'min_order_amount', 'max_order_amount', 'successful_payment_limit' ) as $prefix ) {
+		foreach ( array( 'enabled', 'channel', 'title', 'description', 'min_order_amount', 'max_order_amount', 'successful_payment_limit', 'successful_payment_limit_standard' ) as $prefix ) {
 			$keys[] = $prefix . '_' . $method;
 		}
 	}
@@ -624,6 +648,13 @@ function woo_beyounger_payment_method_config_keys() {
  * @return string
  */
 function woo_beyounger_payment_sanitize_config_value( $key, $value ) {
+	if ( in_array( $key, array( 'supported_card_types_preferred', 'supported_card_types_standard' ), true ) ) {
+		$brands = array( 'visa', 'mastercard', 'discover', 'amex' );
+		if ( ! is_array( $value ) || empty( $value ) || array_filter( $value, static function ( $brand ) use ( $brands ) { return ! is_string( $brand ) || ! in_array( $brand, $brands, true ); } ) ) {
+			return new WP_Error( 'beyounger_invalid_card_types', 'Select at least one supported card type: Visa, Mastercard, Discover or Amex.', array( 'status' => 400 ) );
+		}
+		return array_values( array_intersect( $brands, $value ) );
+	}
 	if ( in_array( $key, array( 'enabled', 'debug', 'enabled_card', 'enabled_paypal', 'enabled_google_pay', 'enabled_cash_app', 'enabled_apple_pay', 'enabled_card_to_crypto' ), true ) ) {
 		$value = is_bool( $value ) ? ( $value ? 'yes' : 'no' ) : (string) $value;
 		return wc_string_to_bool( $value ) ? 'yes' : 'no';
