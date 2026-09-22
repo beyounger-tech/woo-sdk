@@ -4,12 +4,20 @@ Tags: woocommerce, payment, beyoungerpay
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.9
+Stable tag: 1.0.11
 License: GPLv2 or later
 
 BeyoungerPay tokenized direct payment gateway for WooCommerce.
 
 == Description ==
+
+Shipment tracking synchronization: changes to `_wc_shipment_tracking_items` enqueue background jobs for BeyoungerPay orders. New and changed items are posted to `/gateway/service/shipment`; deleted items are retained in the payment system. There is no historical scan or manual order action. Deploy the gateway shipment endpoint and source-ID/version schema migration first.
+
+The integration listens to WordPress post-meta and WooCommerce order-meta events, coalesces events within each request, and serializes work per order. It sends at most five changed items per job, with up to eight delayed retries (60 seconds, 180 seconds, 540 seconds, then increasing to a six-hour cap). Retries read the current order data. Background timing depends on the site's Action Scheduler/WP-Cron runner; this is asynchronous, not a guarantee of immediate delivery.
+
+New payment attempts store their environment and merchant email on the order. Orders without a saved environment default to live for shipment synchronization, regardless of the current plugin environment setting. There is no automatic fallback to sandbox; a successful sync saves the chosen environment. Shipment status and delivery time are not inferred from tracking numbers. Errors are logged under `beyounger-shipment-sync` without credentials or complete payloads. Orders awaiting a payment transaction number resume when it is recorded.
+
+The official Shipment Tracking formatter (`WC_Shipment_Tracking_Actions::get_instance()->get_tracking_items`) is used when available. Built-in carrier links must come from the formatter; unsupported versions log an error rather than inventing a URL. Custom carrier names receive a deterministic `custom_` code. Source tracking IDs must be present. Verify the installed Shipment Tracking/ShipStation version on a staging site; this repository does not include the paid extension.
 
 This plugin adds a BeyoungerPay payment method to WooCommerce.
 
@@ -55,6 +63,14 @@ If the upstream browser redirect drops WooCommerce's order key but still returns
 UTM visibility:
 
 Preferred Channel methods require a matching UTM whitelist rule or an eligible returning customer. Standard Channel also allows other visitors; all other availability checks and amount limits still apply. Each payment method has its own Channel setting, defaulting to Preferred Channel. One source is configured per line:
+
+Credit Card has two configurable brand lists: Supported Card Types (Preferred Customers), for CUSTOM_FD14=0/1, defaults to Visa, Mastercard, Discover and Amex; Supported Card Types (Standard Customers), for CUSTOM_FD14=2, defaults to Visa only. Each list must contain at least one brand. Classic and Blocks checkout display the selected brands using assets/visa.svg, assets/mastercard.svg, assets/discover.svg and assets/amex.svg.
+
+The config API reads and updates supported_card_types_preferred and supported_card_types_standard as JSON arrays of lowercase brand identifiers: visa, mastercard, discover, amex. Empty arrays and unknown brands are rejected. Missing settings use the defaults above. The admin merchant website management screen supports both lists, channel_card, and all six successful_payment_limit_standard_{method} settings.
+
+Config responses include plugin_version and supported_config_keys. Admin displays the reported version and disables unsupported fields with a plugin-update notice. An explicit capability list takes precedence. For legacy plugins without a list, admin uses returned fields plus source-verified capabilities: 1.0.7 supports amount ranges and original daily limits for the first five methods; 1.0.8 adds Card to crypto; 1.0.9/1.0.10 also support all six channel settings. This avoids disabling supported but never-saved settings omitted by legacy exports. New Standard Customers limits and card-type settings are not inferred for these old versions. Unknown versions rely on returned fields only. Admin submits changed fields only, rechecks capabilities and config_version before writing, and compares each requested value against both the update response and a subsequent GET. Equivalent decimal formats and card-brand ordering compare equal. Missing or different values produce a verification error instead of a success message. Legacy plugin versions may replace explicitly blank amount limits with defaults; version 1.0.11 preserves blank as unlimited.
+
+The plugin sends allowed_card_brands as a comma-separated list to the hosted card form and the payment API. For requests containing this field, append "|allowed_card_brands=" followed by its exact value to the existing payment signature input before hashing. Deploy the gateway changes BEFORE this plugin: Merchant/Main verifies this signed policy, Misc/CardBrands supplies the same brand ranges and lengths to PHP and JavaScript, and Transaction/Main enforces both the stored token policy and the current payment policy. Legacy requests without this field retain their previous signature; allowed_card_brand=visa remains supported for older plugins. Card number length and Luhn checks are separate from brand permission checks.
 
 `google`
 
@@ -151,7 +167,8 @@ Example update body:
     "utm_whitelist": "google\nfacebook",
     "enabled_card": "yes",
     "max_order_amount_card": "500",
-    "successful_payment_limit_card": "5000"
+    "successful_payment_limit_card": "5000",
+    "successful_payment_limit_standard_card": ""
   }
 }
 ```
@@ -160,13 +177,20 @@ Daily successful payment limits:
 
 Each BeyoungerPay method has its own single-order amount range. Credit Card, PayPal, Google Pay, Cash App, Apple Pay, and Card to crypto default to 0 to 500. When the current order total is outside a method's range, that method is hidden from checkout. Leave either the minimum or maximum amount empty to disable that side of the range for that payment method.
 
-Each BeyoungerPay method has its own daily successful payment limit. Credit Card, PayPal, Google Pay, Cash App, Apple Pay, and Card to crypto default to 5000. When a method's total successful paid amount exceeds that method's daily limit, that method is hidden from checkout for the rest of the day. Refunded amounts are subtracted from the successful paid total. Leave a limit empty to disable the limit for that payment method.
+Each BeyoungerPay method has two independent daily successful payment limits, displayed next to each other in settings:
+
+* Successful Payment Limit (Preferred Customers): CUSTOM_FD14=0/1, including whitelisted visitors and eligible returning customers. Existing configured limits are preserved; the default is 5000.
+* Successful Payment Limit (Standard Customers): CUSTOM_FD14=2. The default is empty (no limit).
+
+Totals use orders paid today in the site timezone with processing or completed status, grouped by the customer flag saved on the order. Legacy orders without a flag count toward Preferred Customers. Refunded amounts are subtracted. When a group's total exceeds its limit, that payment method is hidden and payment submission is rejected only for that group. The other group and other payment methods remain independent. A total equal to the limit still allows payment, and the current order amount is not added before checking. Leave either limit empty to disable that group's limit.
+
+The signed config endpoints support the existing successful_payment_limit_{method} keys for Preferred Customers and the new successful_payment_limit_standard_{method} keys for Standard Customers. The method suffixes are card, paypal, google_pay, cash_app, apple_pay, and card_to_crypto. An empty string means no limit.
 
 Card to crypto:
 
 Card to crypto uses the Credit Card icon and redirects to the payment URL returned by BeyoungerPay. It does not display the hosted card form or submit card[token]. Transaction parameters are method_type=10, pay_method=C01, request_type=1, and 3ds_mode=1 by default.
 
-It is disabled by default, with a single-order range of 0 to 500 and a daily successful payment limit of 5000. It shares the existing credentials, environment, UTM and returning-customer rules, notification handling, and refund flow.
+It is disabled by default, with a single-order range of 0 to 500, a Preferred Customers daily successful payment limit of 5000, and no Standard Customers daily limit. It shares the existing credentials, environment, UTM and returning-customer rules, notification handling, and refund flow.
 
 The signed config GET and POST/PUT/PATCH endpoints support these Card to crypto fields:
 
@@ -176,6 +200,7 @@ The signed config GET and POST/PUT/PATCH endpoints support these Card to crypto 
 * min_order_amount_card_to_crypto
 * max_order_amount_card_to_crypto
 * successful_payment_limit_card_to_crypto
+* successful_payment_limit_standard_card_to_crypto
 
 == Signature Reference ==
 
@@ -192,6 +217,17 @@ Refund:
 `sha256(api_key + request_time + trade_email + transaction_no + amount)`
 
 == Changelog ==
+
+= 1.0.11 =
+* Add separate Standard Customers limits and configurable Credit Card brands.
+* Report supported_config_keys in config GET and update responses so admin can disable unsupported fields.
+* Show the merchant plugin version in admin and verify returned configuration values after updates.
+* Preserve explicitly blank amount limits as unlimited; apply defaults only to missing settings.
+* Reject reused configuration versions and report settings persistence failures.
+
+= 1.0.10 =
+* Display the VISA icon only for Credit card visitors classified as CUSTOM_FD14=2.
+* Restrict only CUSTOM_FD14=2 credit card payments to VISA with matching gateway support; preserve other visitors' supported brands.
 
 = 1.0.9 =
 * Add independent Preferred Channel and Standard Channel settings for all six payment methods.

@@ -114,6 +114,17 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	}
 
 	/**
+	 * Hide card-type controls while retaining their values in the settings form.
+	 */
+	public function generate_multiselect_html( $key, $data ) {
+		$html = parent::generate_multiselect_html( $key, $data );
+		if ( in_array( $key, array( 'supported_card_types_preferred', 'supported_card_types_standard' ), true ) ) {
+			$html = preg_replace( '/<tr\b/', '<tr style="display: none;"', $html, 1 );
+		}
+		return $html;
+	}
+
+	/**
 	 * Admin settings fields.
 	 */
 	public function init_form_fields() {
@@ -206,7 +217,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'amount_gate'     => array(
 					'title'       => __( 'Amount Limits', 'woo-beyounger-payment' ),
 					'type'        => 'title',
-					'description' => __( 'Each BeyoungerPay payment method can have its own single-order amount range and daily successful payment limit. Single-order defaults are 0 to 500; daily successful payment limit defaults to 5000. Leave a field empty for no limit.', 'woo-beyounger-payment' ),
+					'description' => __( 'Each payment method has a single-order amount range and separate daily successful payment limits for Preferred Customers and Standard Customers. Single-order defaults are 0 to 500; Preferred Customers default to 5000; Standard Customers have no limit by default. Leave a field empty for no limit.', 'woo-beyounger-payment' ),
 				),
 				'payment_methods' => array(
 					'title'       => __( 'Payment Methods', 'woo-beyounger-payment' ),
@@ -261,15 +272,42 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'desc_tip'          => true,
 			),
 			'successful_payment_limit_card' => array(
-				'title'             => __( 'Credit Card Successful Payment Limit', 'woo-beyounger-payment' ),
+				'title'             => __( 'Credit Card Successful Payment Limit (Preferred Customers)', 'woo-beyounger-payment' ),
 				'type'              => 'number',
-				'description'       => __( 'Hide Credit Card when Credit Card successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
+				'description'       => __( 'Hide Credit Card for Preferred Customers when their successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
 				'default'           => '5000',
 				'custom_attributes' => array(
 					'min'  => '0',
 					'step' => '0.01',
 				),
 				'desc_tip'          => true,
+			),
+			'successful_payment_limit_standard_card' => array(
+				'title'             => __( 'Credit Card Successful Payment Limit (Standard Customers)', 'woo-beyounger-payment' ),
+				'type'              => 'number',
+				'description'       => __( 'Hide Credit Card for Standard Customers when their successful payments exceed this amount today. Empty means no limit (default).', 'woo-beyounger-payment' ),
+				'default'           => '',
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '0.01',
+				),
+				'desc_tip'          => true,
+			),
+			'supported_card_types_preferred' => array(
+				'title' => __( 'Supported Card Types (Preferred Customers)', 'woo-beyounger-payment' ),
+				'type' => 'multiselect',
+				'class' => 'wc-enhanced-select',
+				'options' => array( 'visa' => 'Visa', 'mastercard' => 'Mastercard', 'discover' => 'Discover', 'amex' => 'Amex' ),
+				'default' => array( 'visa', 'mastercard', 'discover', 'amex' ),
+				'description' => __( 'Select at least one card type for Preferred Customers.', 'woo-beyounger-payment' ),
+			),
+			'supported_card_types_standard' => array(
+				'title' => __( 'Supported Card Types (Standard Customers)', 'woo-beyounger-payment' ),
+				'type' => 'multiselect',
+				'class' => 'wc-enhanced-select',
+				'options' => array( 'visa' => 'Visa', 'mastercard' => 'Mastercard', 'discover' => 'Discover', 'amex' => 'Amex' ),
+				'default' => array( 'visa' ),
+				'description' => __( 'Select at least one card type for Standard Customers.', 'woo-beyounger-payment' ),
 			),
 			'enabled_paypal'  => array(
 				'title'   => __( 'PayPal', 'woo-beyounger-payment' ),
@@ -319,10 +357,21 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'desc_tip'          => true,
 			),
 			'successful_payment_limit_paypal' => array(
-				'title'             => __( 'PayPal Successful Payment Limit', 'woo-beyounger-payment' ),
+				'title'             => __( 'PayPal Successful Payment Limit (Preferred Customers)', 'woo-beyounger-payment' ),
 				'type'              => 'number',
-				'description'       => __( 'Hide PayPal when PayPal successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
+				'description'       => __( 'Hide PayPal for Preferred Customers when their successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
 				'default'           => '5000',
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '0.01',
+				),
+				'desc_tip'          => true,
+			),
+			'successful_payment_limit_standard_paypal' => array(
+				'title'             => __( 'PayPal Successful Payment Limit (Standard Customers)', 'woo-beyounger-payment' ),
+				'type'              => 'number',
+				'description'       => __( 'Hide PayPal for Standard Customers when their successful payments exceed this amount today. Empty means no limit (default).', 'woo-beyounger-payment' ),
+				'default'           => '',
 				'custom_attributes' => array(
 					'min'  => '0',
 					'step' => '0.01',
@@ -377,10 +426,21 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'desc_tip'          => true,
 			),
 			'successful_payment_limit_google_pay' => array(
-				'title'             => __( 'Google Pay Successful Payment Limit', 'woo-beyounger-payment' ),
+				'title'             => __( 'Google Pay Successful Payment Limit (Preferred Customers)', 'woo-beyounger-payment' ),
 				'type'              => 'number',
-				'description'       => __( 'Hide Google Pay when Google Pay successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
+				'description'       => __( 'Hide Google Pay for Preferred Customers when their successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
 				'default'           => '5000',
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '0.01',
+				),
+				'desc_tip'          => true,
+			),
+			'successful_payment_limit_standard_google_pay' => array(
+				'title'             => __( 'Google Pay Successful Payment Limit (Standard Customers)', 'woo-beyounger-payment' ),
+				'type'              => 'number',
+				'description'       => __( 'Hide Google Pay for Standard Customers when their successful payments exceed this amount today. Empty means no limit (default).', 'woo-beyounger-payment' ),
+				'default'           => '',
 				'custom_attributes' => array(
 					'min'  => '0',
 					'step' => '0.01',
@@ -435,10 +495,21 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'desc_tip'          => true,
 			),
 			'successful_payment_limit_cash_app' => array(
-				'title'             => __( 'Cash App Successful Payment Limit', 'woo-beyounger-payment' ),
+				'title'             => __( 'Cash App Successful Payment Limit (Preferred Customers)', 'woo-beyounger-payment' ),
 				'type'              => 'number',
-				'description'       => __( 'Hide Cash App when Cash App successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
+				'description'       => __( 'Hide Cash App for Preferred Customers when their successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
 				'default'           => '5000',
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '0.01',
+				),
+				'desc_tip'          => true,
+			),
+			'successful_payment_limit_standard_cash_app' => array(
+				'title'             => __( 'Cash App Successful Payment Limit (Standard Customers)', 'woo-beyounger-payment' ),
+				'type'              => 'number',
+				'description'       => __( 'Hide Cash App for Standard Customers when their successful payments exceed this amount today. Empty means no limit (default).', 'woo-beyounger-payment' ),
+				'default'           => '',
 				'custom_attributes' => array(
 					'min'  => '0',
 					'step' => '0.01',
@@ -493,10 +564,21 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'desc_tip'          => true,
 			),
 			'successful_payment_limit_apple_pay' => array(
-				'title'             => __( 'Apple Pay Successful Payment Limit', 'woo-beyounger-payment' ),
+				'title'             => __( 'Apple Pay Successful Payment Limit (Preferred Customers)', 'woo-beyounger-payment' ),
 				'type'              => 'number',
-				'description'       => __( 'Hide Apple Pay when Apple Pay successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
+				'description'       => __( 'Hide Apple Pay for Preferred Customers when their successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
 				'default'           => '5000',
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '0.01',
+				),
+				'desc_tip'          => true,
+			),
+			'successful_payment_limit_standard_apple_pay' => array(
+				'title'             => __( 'Apple Pay Successful Payment Limit (Standard Customers)', 'woo-beyounger-payment' ),
+				'type'              => 'number',
+				'description'       => __( 'Hide Apple Pay for Standard Customers when their successful payments exceed this amount today. Empty means no limit (default).', 'woo-beyounger-payment' ),
+				'default'           => '',
 				'custom_attributes' => array(
 					'min'  => '0',
 					'step' => '0.01',
@@ -551,10 +633,21 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				'desc_tip'          => true,
 			),
 			'successful_payment_limit_card_to_crypto' => array(
-				'title'             => __( 'Card to crypto Successful Payment Limit', 'woo-beyounger-payment' ),
+				'title'             => __( 'Card to crypto Successful Payment Limit (Preferred Customers)', 'woo-beyounger-payment' ),
 				'type'              => 'number',
-				'description'       => __( 'Hide Card to crypto when Card to crypto successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
+				'description'       => __( 'Hide Card to crypto for Preferred Customers when their successful payments exceed this amount today. Default is 5000; empty means no limit.', 'woo-beyounger-payment' ),
 				'default'           => '5000',
+				'custom_attributes' => array(
+					'min'  => '0',
+					'step' => '0.01',
+				),
+				'desc_tip'          => true,
+			),
+			'successful_payment_limit_standard_card_to_crypto' => array(
+				'title'             => __( 'Card to crypto Successful Payment Limit (Standard Customers)', 'woo-beyounger-payment' ),
+				'type'              => 'number',
+				'description'       => __( 'Hide Card to crypto for Standard Customers when their successful payments exceed this amount today. Empty means no limit (default).', 'woo-beyounger-payment' ),
+				'default'           => '',
 				'custom_attributes' => array(
 					'min'  => '0',
 					'step' => '0.01',
@@ -849,6 +942,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 
 		if ( $this->is_card_gateway() && '' !== $card_token ) {
 			$payload['card[token]'] = $card_token;
+			$payload['allowed_card_brands'] = implode( ',', $this->get_supported_card_types( $traffic['custom_fd14'] ) );
 		}
 
 		$payload['sign'] = $this->make_signature(
@@ -859,10 +953,13 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				$pay_method,
 				$amount,
 				$currency,
+				isset( $payload['allowed_card_brands'] ) ? '|allowed_card_brands=' . $payload['allowed_card_brands'] : '',
 			)
 		);
 
 		$order->update_meta_data( '_beyounger_order_id', $order_id );
+		$order->update_meta_data( '_beyounger_environment', $payload['sandbox'] === '1' ? 'sandbox' : 'live' );
+		$order->update_meta_data( '_beyounger_trade_email', $payload['trade_email'] );
 		$order->update_meta_data( '_beyounger_payment_method', $this->variant_key );
 		$order->update_meta_data( '_beyounger_request_type', $this->get_request_type() );
 		$order->update_meta_data( '_beyounger_method_type', $this->get_method_type() );
@@ -1453,6 +1550,10 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			'sandbox'      => $this->is_sandbox() ? '1' : '0',
 		);
 
+		if ( $this->is_card_gateway() ) {
+			$args['allowed_card_brands'] = implode( ',', $this->get_supported_card_types() );
+		}
+
 		$args['sign'] = $this->make_signature(
 			array(
 				$request_time,
@@ -1461,6 +1562,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				$pay_method,
 				$amount,
 				$currency,
+				isset( $args['allowed_card_brands'] ) ? '|allowed_card_brands=' . $args['allowed_card_brands'] : '',
 			)
 		);
 
@@ -1713,7 +1815,72 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 * @return string
 	 */
 	public function get_icon_url() {
-		return $this->icon;
+		if ( $this->is_card_gateway() ) {
+			$icons = $this->get_icon_urls();
+			return $icons[0];
+		}
+		return plugins_url( 'assets/' . $this->icon_file, WOO_BEYOUNGER_PAYMENT_FILE );
+	}
+
+	/**
+	 * Resolve the classic checkout icon using the current visitor context.
+	 */
+	public function get_icon() {
+		if ( $this->is_card_gateway() ) {
+			$html = '<span class="beyounger-card-icons">';
+			foreach ( $this->get_supported_card_types() as $brand ) {
+				$html .= '<img src="' . esc_url( plugins_url( 'assets/' . $brand . '.svg', WOO_BEYOUNGER_PAYMENT_FILE ) ) . '" alt="' . esc_attr( $brand ) . '" />';
+			}
+			return apply_filters( 'woocommerce_gateway_icon', $html . '</span>', $this->id );
+		}
+		$this->icon = $this->get_icon_url();
+		return parent::get_icon();
+	}
+
+	public function get_icon_urls() {
+		if ( ! $this->is_card_gateway() ) {
+			return array( $this->get_icon_url() );
+		}
+		return array_map( static function ( $brand ) {
+			return plugins_url( 'assets/' . $brand . '.svg', WOO_BEYOUNGER_PAYMENT_FILE );
+		}, $this->get_supported_card_types() );
+	}
+
+	public function get_supported_card_types( $customer_flag = null ) {
+		$standard = '2' === ( null === $customer_flag ? $this->get_customer_type_flag() : (string) $customer_flag );
+		$default = $standard ? array( 'visa' ) : array( 'visa', 'mastercard', 'discover', 'amex' );
+		$key = 'supported_card_types_' . ( $standard ? 'standard' : 'preferred' );
+		$value = woo_beyounger_payment_sanitize_config_value( $key, $this->get_option( $key, $default ) );
+		return is_wp_error( $value ) ? $default : $value;
+	}
+
+	public function validate_supported_card_types_preferred_field( $key, $value ) {
+		return $this->validate_supported_card_types_field( $key, $value );
+	}
+
+	public function validate_supported_card_types_standard_field( $key, $value ) {
+		return $this->validate_supported_card_types_field( $key, $value );
+	}
+
+	private function validate_supported_card_types_field( $key, $value ) {
+		$result = woo_beyounger_payment_sanitize_config_value( $key, $value );
+		if ( is_wp_error( $result ) ) {
+			throw new Exception( $result->get_error_message() );
+		}
+		return $result;
+	}
+
+	/**
+	 * Shared CUSTOM_FD14 classification for icons, card forms and payments.
+	 *
+	 * @param bool|null $is_returning_customer Previously resolved eligibility, if available.
+	 * @return string
+	 */
+	private function get_customer_type_flag( $is_returning_customer = null ) {
+		if ( null === $is_returning_customer ) {
+			$is_returning_customer = $this->is_eligible_returning_customer();
+		}
+		return $is_returning_customer ? '1' : ( $this->is_standard_channel() && ! $this->matches_utm_whitelist() ? '2' : '0' );
 	}
 
 	/**
@@ -1810,20 +1977,23 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 * @return bool
 	 */
 	private function passes_daily_successful_payment_limit() {
-		$limit = $this->get_configured_amount( 'successful_payment_limit_' . $this->variant_key, '5000' );
+		$is_standard_customer = '2' === $this->get_customer_type_flag();
+		$prefix               = $is_standard_customer ? 'successful_payment_limit_standard_' : 'successful_payment_limit_';
+		$limit                = $this->get_configured_amount( $prefix . $this->variant_key, $is_standard_customer ? '' : '5000' );
 		if ( null === $limit ) {
 			return true;
 		}
 
-		return $this->get_method_daily_successful_payment_total() <= $limit;
+		return $this->get_method_daily_successful_payment_total( $is_standard_customer ) <= $limit;
 	}
 
 	/**
-	 * Get today's successful paid total for this BeyoungerPay method.
+	 * Get today's successful paid total for this method and customer group.
 	 *
+	 * @param bool $is_standard_customer Whether to count only CUSTOM_FD14=2 orders.
 	 * @return float
 	 */
-	private function get_method_daily_successful_payment_total() {
+	private function get_method_daily_successful_payment_total( $is_standard_customer ) {
 		$args = array(
 			'limit'      => -1,
 			'status'     => array( 'wc-processing', 'wc-completed' ),
@@ -1833,7 +2003,17 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			'return'     => 'objects',
 		);
 
-		return $this->sum_successful_orders( wc_get_orders( $args ) );
+		// Filter in PHP so legacy orders without a flag remain in the preferred group.
+		// This also keeps the grouping identical for HPOS and legacy order storage.
+		$orders = array_filter(
+			wc_get_orders( $args ),
+			static function ( $order ) use ( $is_standard_customer ) {
+				return $order instanceof WC_Order
+					&& ( '2' === (string) $order->get_meta( '_beyounger_cus_fd14', true ) ) === $is_standard_customer;
+			}
+		);
+
+		return $this->sum_successful_orders( $orders );
 	}
 
 	/**
@@ -1862,7 +2042,9 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 * @return float|null
 	 */
 	private function get_configured_amount( $key, $default = '' ) {
-		$value = trim( (string) $this->get_option( $key, $default ) );
+		// WooCommerce get_option's second argument replaces saved empty strings.
+		// Here an explicitly blank amount means unlimited; only missing keys use defaults.
+		$value = trim( (string) ( array_key_exists( $key, $this->settings ) ? $this->settings[ $key ] : $default ) );
 		if ( '' === $value || ! is_numeric( $value ) ) {
 			return null;
 		}
@@ -2056,7 +2238,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		$raw_utm              = function_exists( 'woo_beyounger_payment_get_current_raw_utm' ) ? woo_beyounger_payment_get_current_raw_utm() : $utm;
 		$referer              = function_exists( 'woo_beyounger_payment_get_current_referer' ) ? woo_beyounger_payment_get_current_referer() : '';
 		$is_returning_customer = $this->is_eligible_returning_customer();
-		$custom_fd14          = $is_returning_customer ? '1' : ( $this->is_standard_channel() && ! $this->matches_utm_whitelist() ? '2' : '0' );
+		$custom_fd14          = $this->get_customer_type_flag( $is_returning_customer );
 		$source_type          = 'unknown';
 		$source               = 'unknown';
 		$raw_utm              = array_map( 'sanitize_text_field', is_array( $raw_utm ) ? $raw_utm : array() );

@@ -82,6 +82,7 @@ final class WC_Gateway_Beyounger_Blocks extends \Automattic\WooCommerce\Blocks\P
 			'title'       => $this->gateway ? $this->gateway->get_title() : __( 'Credit card', 'woo-beyounger-payment' ),
 			'description' => $this->gateway ? $this->gateway->get_description() : '',
 			'icon'        => $this->gateway ? $this->gateway->get_icon_url() : '',
+			'icons'       => $this->gateway ? $this->gateway->get_icon_urls() : array(),
 			'orderLimits' => $this->gateway && method_exists( $this->gateway, 'get_order_amount_limits' ) ? $this->gateway->get_order_amount_limits() : array(),
 			'supports'    => array_filter( $this->gateway ? $this->gateway->supports : array( 'products' ) ),
 		);
