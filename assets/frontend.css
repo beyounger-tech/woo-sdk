@@ -1,13 +1,27 @@
+.woocommerce #payment .payment_method_beyounger > label {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	min-height: 20px;
+}
+
 .beyounger-card-icons {
 	display: inline-flex;
+	flex-wrap: wrap;
 	gap: 6px;
 	align-items: center;
+	justify-content: flex-end;
+	margin-left: auto;
+	vertical-align: middle;
 }
 .beyounger-card-icons img {
+	display: block;
+	flex: 0 0 auto;
 	float: none !important;
-	height: 24px;
+	height: 20px;
 	width: auto;
-	max-height: 24px;
+	max-height: 20px;
 	margin: 0 !important;
 }
 
