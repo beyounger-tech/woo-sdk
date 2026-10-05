@@ -3,7 +3,7 @@
  * Plugin Name: Woo Beyounger Payment
  * Plugin URI: https://beyounger.com/
  * Description: BeyoungerPay tokenized direct payment gateway for WooCommerce.
- * Version: 1.0.11
+ * Version: 1.0.12
  * Author: Carter Chen
  * Text Domain: woo-beyounger-payment
  * Domain Path: /languages
@@ -18,7 +18,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.11' );
+define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.12' );
 define( 'WOO_BEYOUNGER_PAYMENT_FILE', __FILE__ );
 define( 'WOO_BEYOUNGER_PAYMENT_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -138,13 +138,20 @@ function woo_beyounger_payment_repair_order_pay_callback() {
 	}
 
 	$merchant_order_id = isset( $_GET['order_id'] ) ? wc_clean( wp_unslash( $_GET['order_id'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-	if ( '' === $merchant_order_id || ! preg_match( '/^WC(\d+)(?:A\d+)?$/', $merchant_order_id, $matches ) ) {
+	if ( '' === $merchant_order_id ) {
 		return;
 	}
 
-	$order_id = absint( $matches[1] );
+	if ( preg_match( '/^WC(\d+)(?:A\d+)?$/', $merchant_order_id, $matches ) ) {
+		$order_id = absint( $matches[1] );
+	} else {
+		$order_id = absint( get_transient( 'beyounger_attempt_' . hash( 'sha256', $merchant_order_id ) ) );
+		if ( ! $order_id ) {
+			$order_id = absint( get_query_var( 'order-pay' ) );
+		}
+	}
 	$order    = wc_get_order( $order_id );
-	if ( ! $order ) {
+	if ( ! $order || ( ! in_array( $merchant_order_id, (array) $order->get_meta( '_beyounger_attempt_ids', true ), true ) && $merchant_order_id !== $order->get_meta( '_beyounger_order_id', true ) ) ) {
 		return;
 	}
 
@@ -182,6 +189,7 @@ function woo_beyounger_payment_repair_order_pay_callback() {
 		array(
 			'pay_for_order' => 'true',
 			'key'           => $order->get_order_key(),
+			'beyounger_return' => '1',
 		),
 		$payment_url
 	);
@@ -190,6 +198,84 @@ function woo_beyounger_payment_repair_order_pay_callback() {
 	exit;
 }
 add_action( 'template_redirect', 'woo_beyounger_payment_repair_order_pay_callback', 1 );
+
+/** Clear only the checkout cart that produced a paid Beyounger order. */
+function woo_beyounger_payment_clear_paid_cart() {
+	if ( ! function_exists( 'WC' ) || ! WC()->session || ! WC()->cart ) {
+		return;
+	}
+	$saved = WC()->session->get( 'beyounger_checkout_cart' );
+	if ( ! is_array( $saved ) || empty( $saved['order_id'] ) || empty( $saved['cart_hash'] ) ) {
+		return;
+	}
+	$order = wc_get_order( absint( $saved['order_id'] ) );
+	if ( ! $order || ! $order->is_paid() ) {
+		return;
+	}
+	if ( hash_equals( (string) $saved['cart_hash'], (string) WC()->cart->get_cart_hash() ) ) {
+		WC()->cart->empty_cart();
+	}
+	WC()->session->__unset( 'beyounger_checkout_cart' );
+}
+add_action( 'woocommerce_cart_loaded_from_session', 'woo_beyounger_payment_clear_paid_cart', 20 );
+
+/** Show a confirmation state only for a keyed Beyounger browser return. */
+function woo_beyounger_payment_show_return_confirmation() {
+	if ( ! function_exists( 'is_wc_endpoint_url' ) || ! is_wc_endpoint_url( 'order-pay' ) ) {
+		return;
+	}
+	if ( empty( $_GET['beyounger_return'] ) && empty( $_GET['order_id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return;
+	}
+	$order = wc_get_order( absint( get_query_var( 'order-pay' ) ) );
+	$key   = isset( $_GET['key'] ) ? wc_clean( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	if ( ! $order || ! hash_equals( $order->get_order_key(), (string) $key ) ) {
+		return;
+	}
+	if ( ! in_array( $order->get_payment_method(), array( 'beyounger', 'beyounger_paypal', 'beyounger_google_pay', 'beyounger_cash_app', 'beyounger_apple_pay', 'beyounger_card_to_crypto' ), true ) ) {
+		return;
+	}
+	if ( $order->is_paid() ) {
+		wp_safe_redirect( $order->get_checkout_order_received_url() );
+		exit;
+	}
+	include WOO_BEYOUNGER_PAYMENT_PATH . 'templates/payment-confirmation.php';
+	exit;
+}
+add_action( 'template_redirect', 'woo_beyounger_payment_show_return_confirmation', 2 );
+
+/** Return the local WooCommerce order state to the confirmation page. */
+function woo_beyounger_payment_ajax_order_status() {
+	$order = wc_get_order( isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+	$key   = isset( $_POST['key'] ) ? wc_clean( wp_unslash( $_POST['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+	if ( ! $order || ! hash_equals( $order->get_order_key(), (string) $key ) ) {
+		wp_send_json_error( array( 'message' => 'Order not found.' ), 403 );
+	}
+	$status = $order->is_paid() ? 'paid' : ( $order->has_status( 'failed' ) && $order->needs_payment() ? 'failed' : ( $order->has_status( 'cancelled' ) ? 'unavailable' : 'pending' ) );
+	if ( 'paid' === $status ) {
+		woo_beyounger_payment_clear_paid_cart();
+	}
+	wp_send_json_success( array(
+		'status' => $status,
+		'redirect' => 'paid' === $status ? $order->get_checkout_order_received_url() : ( 'failed' === $status ? $order->get_checkout_payment_url() : '' ),
+	) );
+}
+add_action( 'wp_ajax_beyounger_order_status', 'woo_beyounger_payment_ajax_order_status' );
+add_action( 'wp_ajax_nopriv_beyounger_order_status', 'woo_beyounger_payment_ajax_order_status' );
+
+/** Load the card gateway explicitly for frontend AJAX requests. */
+function woo_beyounger_payment_ajax_card_context() {
+	if ( ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
+		wp_send_json_error( array( 'message' => 'Payment gateway unavailable.' ), 503 );
+	}
+	$gateways = WC()->payment_gateways()->payment_gateways();
+	if ( ! isset( $gateways['beyounger'] ) ) {
+		wp_send_json_error( array( 'message' => 'Card payment unavailable.' ), 503 );
+	}
+	$gateways['beyounger']->refresh_card_form_context();
+}
+add_action( 'wp_ajax_beyounger_card_context', 'woo_beyounger_payment_ajax_card_context' );
+add_action( 'wp_ajax_nopriv_beyounger_card_context', 'woo_beyounger_payment_ajax_card_context' );
 
 /**
  * Get UTM values from the current request.
