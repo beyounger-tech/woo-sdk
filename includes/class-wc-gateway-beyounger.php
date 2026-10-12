@@ -678,19 +678,20 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			return false;
 		}
 
-			if ( ! $this->is_standard_channel() && ! $this->passes_utm_gate() ) {
+			$pay_order = $this->get_order_pay_order();
+			if ( ! $this->passes_order_amount_gate( $pay_order ) ) {
 				return false;
 			}
 
-			if ( ! $this->passes_order_amount_gate() ) {
+			if ( ! $this->is_standard_channel() && ! $this->passes_utm_gate() && ( ! $pay_order || $pay_order->get_payment_method() !== $this->id ) ) {
 				return false;
 			}
 
-			if ( ! $this->passes_daily_successful_payment_limit() ) {
+			if ( ! parent::is_available() || ! $this->passes_daily_successful_payment_limit() ) {
 				return false;
 			}
 
-			return parent::is_available();
+			return true;
 		}
 
 	/**
@@ -708,12 +709,17 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			return array( 'result' => 'failure' );
 		}
 
+		if ( ! $order->needs_payment() ) {
+			wc_add_notice( __( 'This order no longer needs payment.', 'woo-beyounger-payment' ), 'error' );
+			return array( 'result' => 'failure' );
+		}
+
 		if ( ! $this->passes_order_amount_gate( $order ) ) {
 			wc_add_notice( __( 'This payment method is not available for this order amount.', 'woo-beyounger-payment' ), 'error' );
 			return array( 'result' => 'failure' );
 		}
 
-		if ( ! $this->passes_daily_successful_payment_limit() ) {
+		if ( ! $this->passes_daily_successful_payment_limit( true ) ) {
 			wc_add_notice( __( 'This payment method is not available today.', 'woo-beyounger-payment' ), 'error' );
 			return array( 'result' => 'failure' );
 		}
@@ -723,6 +729,12 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			$card_token = $this->get_card_token_from_request();
 			if ( '' === $card_token ) {
 				wc_add_notice( __( 'Please complete the secure card form before placing the order.', 'woo-beyounger-payment' ), 'error' );
+				return array( 'result' => 'failure' );
+			}
+			$card_order_id = $this->get_submitted_card_form_order_id();
+			$previous_ids  = (array) $order->get_meta( '_beyounger_attempt_ids', true );
+			if ( '' === $card_order_id || in_array( $card_order_id, $previous_ids, true ) || $card_order_id === $order->get_meta( '_beyounger_order_id', true ) ) {
+				wc_add_notice( __( 'Please refresh the secure card form and try again.', 'woo-beyounger-payment' ), 'error' );
 				return array( 'result' => 'failure' );
 			}
 		}
@@ -762,12 +774,16 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 
 		$data = isset( $parsed['data'] ) && is_array( $parsed['data'] ) ? $parsed['data'] : array();
 		$this->persist_transaction_data( $order, $payload['order_id'], $data );
+		$order = wc_get_order( $order_id ) ?: $order;
+		if ( $order->is_paid() ) {
+			$this->remember_checkout_cart( $order );
+			$this->clear_card_form_order_id();
+			return array( 'result' => 'success', 'redirect' => $this->get_return_url( $order ) );
+		}
 
 		if ( ! empty( $data['pay_url'] ) ) {
 			$order->update_status( 'pending', __( 'Awaiting BeyoungerPay payment.', 'woo-beyounger-payment' ) );
-			if ( WC()->cart ) {
-				WC()->cart->empty_cart();
-			}
+			$this->remember_checkout_cart( $order );
 			$this->clear_card_form_order_id();
 
 			return array(
@@ -778,14 +794,16 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 
 		$status = isset( $data['status'] ) ? sanitize_key( $data['status'] ) : 'pending';
 		$this->apply_beyounger_status( $order, $status, $data, 'payment_response' );
-		if ( WC()->cart ) {
-			WC()->cart->empty_cart();
-		}
 		$this->clear_card_form_order_id();
+		if ( 'failed' === $status ) {
+			wc_add_notice( __( 'Payment was not completed. Please try again.', 'woo-beyounger-payment' ), 'error' );
+			return array( 'result' => 'failure' );
+		}
+		$this->remember_checkout_cart( $order );
 
 		return array(
 			'result'   => 'success',
-			'redirect' => $this->get_return_url( $order ),
+			'redirect' => $order->is_paid() ? $this->get_return_url( $order ) : $this->get_callback_url( $order ),
 		);
 	}
 
@@ -893,6 +911,18 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		}
 
 		$status = isset( $payload['status'] ) ? sanitize_key( $payload['status'] ) : '';
+		$current_attempt = (string) $order->get_meta( '_beyounger_order_id', true );
+		if ( $order->is_paid() && 'paid' !== $status ) {
+			status_header( 200 );
+			echo 'success';
+			exit;
+		}
+		if ( $current_attempt && $current_attempt !== $order_id && 'paid' !== $status ) {
+			$order->add_order_note( __( 'A previous BeyoungerPay attempt reported a status after a newer attempt started.', 'woo-beyounger-payment' ) );
+			status_header( 200 );
+			echo 'success';
+			exit;
+		}
 		$this->persist_transaction_data( $order, $order_id, $payload );
 		$this->apply_beyounger_status( $order, $status, $payload, 'notify' );
 
@@ -958,6 +988,10 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		);
 
 		$order->update_meta_data( '_beyounger_order_id', $order_id );
+		$attempt_ids = $order->get_meta( '_beyounger_attempt_ids', true );
+		$attempt_ids = is_array( $attempt_ids ) ? $attempt_ids : array();
+		$attempt_ids[] = $order_id;
+		$order->update_meta_data( '_beyounger_attempt_ids', array_values( array_unique( $attempt_ids ) ) );
 		$order->update_meta_data( '_beyounger_environment', $payload['sandbox'] === '1' ? 'sandbox' : 'live' );
 		$order->update_meta_data( '_beyounger_trade_email', $payload['trade_email'] );
 		$order->update_meta_data( '_beyounger_payment_method', $this->variant_key );
@@ -965,6 +999,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		$order->update_meta_data( '_beyounger_method_type', $this->get_method_type() );
 		$this->persist_traffic_context( $order, $traffic );
 		$order->save();
+		set_transient( 'beyounger_attempt_' . hash( 'sha256', $order_id ), $order->get_id(), MONTH_IN_SECONDS );
 
 		return $payload;
 	}
@@ -987,7 +1022,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		<div class="beyounger-card-form" data-beyounger-card-form="classic">
 			<iframe
 				data-beyounger-card-iframe="1"
-				src="<?php echo esc_url( $context['url'] ); ?>"
+				data-src="<?php echo esc_url( $context['url'] ); ?>"
 				title="<?php echo esc_attr__( 'Secure card form', 'woo-beyounger-payment' ); ?>"
 				style="width:100%;height:96px;border:0;"
 				loading="lazy"
@@ -999,12 +1034,57 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		</div>
 		<script>
 			(function () {
+				window.beyoungerCardContext = <?php echo wp_json_encode( $context, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ); ?>;
 				if (window.beyoungerCardTokenListenerInstalled) {
 					return;
 				}
 				window.beyoungerCardTokenListenerInstalled = true;
 				window.beyoungerCardTokenWaiters = [];
 				window.beyoungerCardTokenSubmitting = false;
+				window.beyoungerCardRefreshPromise = null;
+				window.beyoungerActivateCardForm = function () {
+					var selected = document.querySelector('form.checkout [name="payment_method"]:checked, form#order_review [name="payment_method"]:checked, form.checkout input[type="hidden"][name="payment_method"], form#order_review input[type="hidden"][name="payment_method"]');
+					if (!selected || selected.value !== 'beyounger') {
+						return;
+					}
+					document.querySelectorAll('[data-beyounger-card-form="classic"] iframe[data-src]').forEach(function (iframe) {
+						iframe.src = iframe.getAttribute('data-src');
+						iframe.removeAttribute('data-src');
+					});
+				};
+				window.beyoungerActivateCardForm();
+				document.addEventListener('change', window.beyoungerActivateCardForm, true);
+				window.beyoungerRefreshCardForm = function () {
+					if (window.beyoungerCardRefreshPromise) {
+						return window.beyoungerCardRefreshPromise;
+					}
+					var current = window.beyoungerCardContext;
+					var body = new URLSearchParams({
+						action: 'beyounger_card_context',
+						nonce: current.refresh_nonce,
+						woo_order_id: String(current.woo_order_id || ''),
+						woo_order_key: current.woo_order_key || ''
+					});
+					window.beyoungerCardRefreshPromise = fetch(current.refresh_url, { method: 'POST', credentials: 'same-origin', body: body })
+						.then(function (response) { return response.json(); })
+						.then(function (response) {
+							if (!response.success || !response.data || !response.data.url) {
+								throw new Error('Unable to refresh the secure card form. Please reload the page.');
+							}
+							window.beyoungerCardContext = response.data;
+							document.querySelectorAll('[data-beyounger-card-form="classic"]').forEach(function (container) {
+								var iframe = container.querySelector('iframe');
+								if (iframe) {
+									iframe.setAttribute('data-src', response.data.url);
+									window.beyoungerActivateCardForm();
+								}
+								var orderId = container.querySelector('[name="beyounger_card_order_id"]');
+								if (orderId) { orderId.value = response.data.order_id; }
+								container.querySelectorAll('[name="card[token]"], [name="beyounger_card_token"]').forEach(function (field) { field.value = ''; });
+							});
+						}).finally(function () { window.beyoungerCardRefreshPromise = null; });
+					return window.beyoungerCardRefreshPromise;
+				};
 				window.beyoungerEscapeHtml = function (value) {
 					return String(value).replace(/[&<>"']/g, function (char) {
 						return {
@@ -1017,8 +1097,12 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 					});
 				};
 				window.beyoungerRequestCardToken = function () {
+				if (window.beyoungerCardRefreshPromise) {
+					return window.beyoungerCardRefreshPromise.then(function () { return window.beyoungerRequestCardToken(); });
+				}
+					window.beyoungerActivateCardForm();
 					var iframe = document.querySelector('[data-beyounger-card-iframe="1"]');
-					if (!iframe || !iframe.contentWindow) {
+					if (!iframe || !iframe.src || iframe.hasAttribute('data-src') || !iframe.contentWindow) {
 						return Promise.reject(new Error('Secure card form is not ready.'));
 					}
 
@@ -1090,6 +1174,31 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				});
 				if (window.jQuery) {
 					window.jQuery(function ($) {
+						window.beyoungerActivateCardForm();
+						$(document.body).on('updated_checkout', window.beyoungerActivateCardForm);
+						var payForm = document.querySelector('form#order_review');
+						if (payForm) {
+							payForm.addEventListener('submit', function (event) {
+								var selected = payForm.querySelector('[name="payment_method"]:checked');
+								if (!selected || selected.value !== 'beyounger' || window.beyoungerCardTokenSubmitting) {
+									window.beyoungerCardTokenSubmitting = false;
+									return;
+								}
+								event.preventDefault();
+								event.stopImmediatePropagation();
+								window.beyoungerRequestCardToken().then(function () {
+									window.beyoungerCardTokenSubmitting = true;
+									payForm.requestSubmit ? payForm.requestSubmit() : payForm.submit();
+								}).catch(function (error) {
+									window.alert(error.message || 'Please complete the secure card form before paying.');
+								});
+							}, true);
+						}
+						$(document.body).on('checkout_error', function () {
+							if ($('form.checkout [name="payment_method"]:checked').val() === 'beyounger') {
+								window.beyoungerRefreshCardForm().catch(function () {});
+							}
+						});
 						$('form.checkout').on('checkout_place_order_beyounger', function () {
 							var form = $(this);
 							var token = form.find('[name="beyounger_card_token"]').val();
@@ -1315,7 +1424,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			case 'pending':
 			case 'unpaid':
 			default:
-				if ( ! $order->is_paid() && ! $order->has_status( array( 'pending', 'failed', 'cancelled' ) ) ) {
+				if ( ! $order->is_paid() && ! $order->has_status( 'pending' ) ) {
 					$order->update_status( 'pending', __( 'Awaiting BeyoungerPay payment confirmation.', 'woo-beyounger-payment' ) );
 				}
 				break;
@@ -1417,7 +1526,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		$attempt++;
 		$order->update_meta_data( '_beyounger_payment_attempt', $attempt );
 
-		return 'WC' . $order->get_id() . 'A' . $attempt;
+		return 'WC' . $order->get_id() . 'A' . $attempt . wp_rand( 100000000, 999999999 );
 	}
 
 	/**
@@ -1428,9 +1537,17 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 * @return WC_Order|false
 	 */
 	private function get_order_by_beyounger_order_id( $merchant_order_id ) {
+		$mapped_order_id = get_transient( 'beyounger_attempt_' . hash( 'sha256', (string) $merchant_order_id ) );
+		if ( $mapped_order_id ) {
+			$order = wc_get_order( absint( $mapped_order_id ) );
+			if ( $order && ( in_array( $merchant_order_id, (array) $order->get_meta( '_beyounger_attempt_ids', true ), true ) || $merchant_order_id === $order->get_meta( '_beyounger_order_id', true ) ) ) {
+				return $order;
+			}
+		}
+
 		if ( preg_match( '/^WC(\d+)(?:A\d+)?$/', $merchant_order_id, $matches ) ) {
 			$order = wc_get_order( (int) $matches[1] );
-			if ( $order ) {
+			if ( $order && ( in_array( $merchant_order_id, (array) $order->get_meta( '_beyounger_attempt_ids', true ), true ) || $merchant_order_id === $order->get_meta( '_beyounger_order_id', true ) ) ) {
 				return $order;
 			}
 		}
@@ -1515,6 +1632,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			array(
 				'pay_for_order' => 'true',
 				'key'           => $order->get_order_key(),
+				'beyounger_return' => '1',
 			),
 			$payment_url
 		);
@@ -1531,11 +1649,14 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 *
 	 * @return array
 	 */
-	public function get_card_form_context() {
+	public function get_card_form_context( $order = null ) {
+		if ( null === $order ) {
+			$order = $this->get_order_pay_order();
+		}
 		$request_time = (string) time();
 		$order_id     = $this->get_or_create_card_form_order_id();
-		$amount       = $this->get_checkout_amount();
-		$currency     = get_woocommerce_currency();
+		$amount       = $this->get_checkout_amount( $order );
+		$currency     = $order instanceof WC_Order ? $order->get_currency() : get_woocommerce_currency();
 		$pay_method   = $this->get_pay_method();
 		$origin       = $this->get_origin_url();
 
@@ -1569,6 +1690,10 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		return array(
 			'url'             => add_query_arg( $args, self::CARD_FORM_ORIGIN . self::CARD_FORM_PATH ),
 			'order_id'        => $order_id,
+			'refresh_url'     => admin_url( 'admin-ajax.php' ),
+			'refresh_nonce'   => wp_create_nonce( 'beyounger_card_context' ),
+			'woo_order_id'    => $order instanceof WC_Order ? $order->get_id() : 0,
+			'woo_order_key'   => $order instanceof WC_Order ? $order->get_order_key() : '',
 			'allowed_origins' => array_values(
 				array_unique(
 					array_filter(
@@ -1597,12 +1722,55 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 *
 	 * @return string
 	 */
-	private function get_checkout_amount() {
+	private function get_checkout_amount( $order = null ) {
+		if ( $order instanceof WC_Order ) {
+			return wc_format_decimal( $order->get_total(), 2 );
+		}
 		if ( WC()->cart ) {
 			return wc_format_decimal( WC()->cart->get_total( 'edit' ), 2 );
 		}
 
 		return wc_format_decimal( 0, 2 );
+	}
+
+	/** Return the keyed order on WooCommerce's order payment page. */
+	private function get_order_pay_order() {
+		if ( ! function_exists( 'is_wc_endpoint_url' ) || ! is_wc_endpoint_url( 'order-pay' ) ) {
+			return null;
+		}
+		$order = wc_get_order( absint( get_query_var( 'order-pay' ) ) );
+		$key   = isset( $_GET['key'] ) ? wc_clean( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return $order && hash_equals( $order->get_order_key(), (string) $key ) ? $order : null;
+	}
+
+	/** Issue a new signed card iframe context after a failed checkout attempt. */
+	public function refresh_card_form_context() {
+		check_ajax_referer( 'beyounger_card_context', 'nonce' );
+		if ( 'yes' !== $this->enabled ) {
+			wp_send_json_error( array( 'message' => 'Card payment is unavailable.' ), 403 );
+		}
+		$order = null;
+		if ( ! WC()->cart && function_exists( 'wc_load_cart' ) ) {
+			wc_load_cart();
+		}
+		if ( ! empty( $_POST['woo_order_id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$order = wc_get_order( absint( $_POST['woo_order_id'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$key   = isset( $_POST['woo_order_key'] ) ? wc_clean( wp_unslash( $_POST['woo_order_key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			if ( ! $order || ! hash_equals( $order->get_order_key(), (string) $key ) || ! $order->needs_payment() ) {
+				wp_send_json_error( array( 'message' => 'Order is not payable.' ), 403 );
+			}
+		}
+		wp_send_json_success( $this->get_card_form_context( $order ) );
+	}
+
+	/** Remember only the cart that created this order, for clearing after confirmed payment. */
+	private function remember_checkout_cart( WC_Order $order ) {
+		if ( WC()->session && WC()->cart && ! $this->get_order_pay_order() ) {
+			WC()->session->set( 'beyounger_checkout_cart', array(
+				'order_id' => $order->get_id(),
+				'cart_hash' => WC()->cart->get_cart_hash(),
+			) );
+		}
 	}
 
 	/**
@@ -1901,11 +2069,11 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 * @return bool
 	 */
 	private function passes_utm_gate() {
-		if ( $this->is_eligible_returning_customer() ) {
+		if ( $this->matches_utm_whitelist() ) {
 			return true;
 		}
 
-		return $this->matches_utm_whitelist();
+		return $this->is_eligible_returning_customer();
 	}
 
 	/**
@@ -1976,7 +2144,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 *
 	 * @return bool
 	 */
-	private function passes_daily_successful_payment_limit() {
+	private function passes_daily_successful_payment_limit( $force_refresh = false ) {
 		$is_standard_customer = '2' === $this->get_customer_type_flag();
 		$prefix               = $is_standard_customer ? 'successful_payment_limit_standard_' : 'successful_payment_limit_';
 		$limit                = $this->get_configured_amount( $prefix . $this->variant_key, $is_standard_customer ? '' : '5000' );
@@ -1984,18 +2152,34 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			return true;
 		}
 
-		return $this->get_method_daily_successful_payment_total( $is_standard_customer ) <= $limit;
+		return $this->get_method_daily_successful_payment_total( $is_standard_customer, $limit, $force_refresh ) <= $limit;
 	}
 
 	/**
 	 * Get today's successful paid total for this method and customer group.
 	 *
 	 * @param bool $is_standard_customer Whether to count only CUSTOM_FD14=2 orders.
+	 * @param float $limit Configured daily amount limit.
+	 * @param bool  $force_refresh Recalculate when an order is actually submitted.
 	 * @return float
 	 */
-	private function get_method_daily_successful_payment_total( $is_standard_customer ) {
+	private function get_method_daily_successful_payment_total( $is_standard_customer, $limit, $force_refresh = false ) {
+		// Checkout can ask each gateway for availability multiple times in one request.
+		// Keep the expensive order scan shared across those calls and short lived
+		// across checkout refresh requests.
+		static $request_totals = array();
+		$cache_key = 'beyounger_paid_' . current_time( 'Ymd' ) . '_' . $this->variant_key . '_' . ( $is_standard_customer ? 'standard' : 'preferred' );
+		if ( ! $force_refresh && isset( $request_totals[ $cache_key ] ) && $request_totals[ $cache_key ]['limit'] === $limit ) {
+			return $request_totals[ $cache_key ]['total'];
+		}
+		$cached = $force_refresh ? false : get_transient( $cache_key );
+		if ( is_array( $cached ) && isset( $cached['limit'], $cached['total'] ) && (float) $cached['limit'] === $limit ) {
+			$request_totals[ $cache_key ] = $cached;
+			return (float) $cached['total'];
+		}
+
 		$args = array(
-			'limit'      => -1,
+			'limit'      => 100,
 			'status'     => array( 'wc-processing', 'wc-completed' ),
 			'date_paid'  => $this->get_today_date_range_query(),
 			'meta_key'   => '_beyounger_payment_method',
@@ -2003,17 +2187,26 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			'return'     => 'objects',
 		);
 
-		// Filter in PHP so legacy orders without a flag remain in the preferred group.
-		// This also keeps the grouping identical for HPOS and legacy order storage.
-		$orders = array_filter(
-			wc_get_orders( $args ),
-			static function ( $order ) use ( $is_standard_customer ) {
-				return $order instanceof WC_Order
-					&& ( '2' === (string) $order->get_meta( '_beyounger_cus_fd14', true ) ) === $is_standard_customer;
+		// Legacy orders without a flag belong to the preferred group. Stop as
+		// soon as this method is over its limit; an exact total is unnecessary.
+		$total = 0.0;
+		$page  = 1;
+		do {
+			$args['paged'] = $page++;
+			$orders = wc_get_orders( $args );
+			foreach ( $orders as $order ) {
+				if ( $order instanceof WC_Order && ( '2' === (string) $order->get_meta( '_beyounger_cus_fd14', true ) ) === $is_standard_customer ) {
+					$total += $this->get_order_net_paid_total( $order );
+					if ( $total > $limit ) {
+						break 2;
+					}
+				}
 			}
-		);
+		} while ( count( $orders ) === $args['limit'] );
 
-		return $this->sum_successful_orders( $orders );
+		$request_totals[ $cache_key ] = array( 'limit' => $limit, 'total' => $total );
+		set_transient( $cache_key, $request_totals[ $cache_key ], 5 * MINUTE_IN_SECONDS );
+		return $total;
 	}
 
 	/**
@@ -2065,25 +2258,6 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Sum net paid total for WooCommerce orders.
-	 *
-	 * @param array $orders Orders.
-	 *
-	 * @return float
-	 */
-	private function sum_successful_orders( array $orders ) {
-		$total = 0.0;
-
-		foreach ( $orders as $order ) {
-			if ( $order instanceof WC_Order ) {
-				$total += $this->get_order_net_paid_total( $order );
-			}
-		}
-
-		return $total;
-	}
-
-	/**
 	 * Order total after refunds.
 	 *
 	 * @param WC_Order $order Order.
@@ -2100,6 +2274,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 * @return bool
 	 */
 	private function is_eligible_returning_customer() {
+		static $eligibility = array();
 		$args       = array(
 			'limit'        => 10,
 			'orderby'      => 'date',
@@ -2118,6 +2293,10 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		} else {
 			return false;
 		}
+		$cache_key = $customer_id . '|' . $email;
+		if ( isset( $eligibility[ $cache_key ] ) ) {
+			return $eligibility[ $cache_key ];
+		}
 
 		$orders = wc_get_orders( $args );
 
@@ -2129,10 +2308,12 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 
 		foreach ( $orders as $order ) {
 			if ( $order instanceof WC_Order && ! $this->order_has_refund( $order ) ) {
+				$eligibility[ $cache_key ] = true;
 				return true;
 			}
 		}
 
+		$eligibility[ $cache_key ] = false;
 		return false;
 	}
 

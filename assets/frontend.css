@@ -61,3 +61,264 @@
 	z-index: 999999 !important;
 	pointer-events: auto;
 }
+
+.beyounger-payment-confirmation {
+	box-sizing: border-box;
+	max-width: 760px;
+	margin: clamp(32px, 6vw, 72px) auto;
+	padding: 0 20px;
+	color: #242424;
+}
+
+.beyounger-payment-confirmation *,
+.beyounger-payment-confirmation *::before,
+.beyounger-payment-confirmation *::after {
+	box-sizing: border-box;
+}
+
+.beyounger-payment-confirmation [hidden] {
+	display: none !important;
+}
+
+.beyounger-confirmation-card {
+	overflow: hidden;
+	margin-top: 50px;
+	background: #fff;
+	border: 1px solid #e8e8e8;
+	border-radius: 16px;
+	box-shadow: 0 14px 36px rgba(0, 0, 0, .07);
+}
+
+.beyounger-confirmation-intro {
+	padding: 38px 42px 30px;
+	border-top: 4px solid #c82935;
+}
+
+.beyounger-confirmation-status-icon {
+	display: grid;
+	width: 48px;
+	height: 48px;
+	place-items: center;
+	margin-bottom: 20px;
+	border-radius: 50%;
+	background: #fceff0;
+	color: #b82430;
+}
+
+.beyounger-confirmation-status-symbol {
+	display: none;
+	font-size: 25px;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.beyounger-confirmation-status-icon svg {
+	width: 25px;
+	height: 25px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.beyounger-confirmation-status-label {
+	display: inline-block;
+	margin-bottom: 8px;
+	color: #a4232e;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+}
+
+.beyounger-confirmation-intro h1 {
+	margin: 0 0 12px;
+	color: #1c1c1c;
+	font-size: clamp(27px, 4vw, 36px);
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.beyounger-confirmation-intro p,
+.beyounger-confirmation-help p {
+	max-width: 590px;
+	margin: 0;
+	color: #5e5e5e;
+	font-size: 15px;
+	line-height: 1.65;
+}
+
+.beyounger-confirmation-details,
+.beyounger-confirmation-result {
+	padding: 28px 42px;
+	border-top: 1px solid #ececec;
+}
+
+.beyounger-confirmation-details h2,
+.beyounger-confirmation-result h2 {
+	margin: 0 0 18px;
+	color: #262626;
+	font-size: 17px;
+	font-weight: 700;
+	line-height: 1.35;
+}
+
+.beyounger-confirmation-details dl {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 20px 28px;
+	margin: 0;
+}
+
+.beyounger-confirmation-details dl > div {
+	min-width: 0;
+}
+
+.beyounger-confirmation-details dt {
+	margin-bottom: 5px;
+	color: #777;
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.beyounger-confirmation-details dd {
+	overflow-wrap: anywhere;
+	margin: 0;
+	color: #222;
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1.45;
+}
+
+.beyounger-confirmation-result {
+	background: #fafafa;
+}
+
+.beyounger-confirmation-result h2 {
+	margin-bottom: 10px;
+}
+
+.beyounger-confirmation-result p {
+	margin: 0;
+	color: #555;
+	font-size: 14px;
+	line-height: 1.55;
+}
+
+.beyounger-confirmation-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-top: 18px;
+}
+
+.beyounger-confirmation-actions:empty {
+	display: none;
+}
+
+.beyounger-payment-confirmation .beyounger-confirmation-actions .button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 44px;
+	margin: 0;
+	padding: 10px 20px;
+	border: 0;
+	border-radius: 6px;
+	background: #242424;
+	color: #fff;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.3;
+	text-align: center;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.beyounger-payment-confirmation .beyounger-confirmation-actions .button:hover,
+.beyounger-payment-confirmation .beyounger-confirmation-actions .button:focus-visible {
+	background: #a4232e;
+	color: #fff;
+}
+
+.beyounger-confirmation-help {
+	padding: 24px 42px 30px;
+	border-top: 1px solid #ececec;
+}
+
+.beyounger-confirmation-help strong {
+	display: block;
+	margin-bottom: 5px;
+	font-size: 14px;
+}
+
+.beyounger-confirmation-help p {
+	font-size: 14px;
+}
+
+.beyounger-payment-confirmation[data-state="paid"] .beyounger-confirmation-status-icon {
+	background: #eaf5ed;
+	color: #248448;
+}
+
+.beyounger-payment-confirmation[data-state="paid"] .beyounger-confirmation-status-label {
+	color: #248448;
+}
+
+.beyounger-payment-confirmation[data-state="paid"] .beyounger-confirmation-status-icon svg,
+.beyounger-payment-confirmation[data-state="failed"] .beyounger-confirmation-status-icon svg,
+.beyounger-payment-confirmation[data-state="unavailable"] .beyounger-confirmation-status-icon svg {
+	display: none;
+}
+
+.beyounger-payment-confirmation[data-state="paid"] .beyounger-confirmation-status-symbol,
+.beyounger-payment-confirmation[data-state="failed"] .beyounger-confirmation-status-symbol,
+.beyounger-payment-confirmation[data-state="unavailable"] .beyounger-confirmation-status-symbol {
+	display: block;
+}
+
+.beyounger-payment-confirmation[data-state="paid"] .beyounger-confirmation-status-symbol::before {
+	content: "✓";
+}
+
+.beyounger-payment-confirmation[data-state="failed"] .beyounger-confirmation-status-symbol::before,
+.beyounger-payment-confirmation[data-state="unavailable"] .beyounger-confirmation-status-symbol::before {
+	content: "!";
+}
+
+.beyounger-payment-confirmation[data-state="failed"] .beyounger-confirmation-status-icon,
+.beyounger-payment-confirmation[data-state="unavailable"] .beyounger-confirmation-status-icon {
+	background: #fceff0;
+	color: #b82430;
+}
+
+@media (max-width: 600px) {
+	.beyounger-payment-confirmation {
+		margin: 28px auto 48px;
+		padding: 0 16px;
+	}
+
+	.beyounger-confirmation-intro {
+		padding: 30px 24px 26px;
+	}
+
+	.beyounger-confirmation-details,
+	.beyounger-confirmation-result {
+		padding: 24px;
+	}
+
+	.beyounger-confirmation-details dl {
+		gap: 18px 16px;
+	}
+
+	.beyounger-confirmation-help {
+		padding: 22px 24px 26px;
+	}
+}
+
+@media (max-width: 380px) {
+	.beyounger-confirmation-details dl {
+		grid-template-columns: 1fr;
+	}
+}

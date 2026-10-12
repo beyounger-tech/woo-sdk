@@ -4,7 +4,7 @@ Tags: woocommerce, payment, beyoungerpay
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.11
+Stable tag: 1.0.13
 License: GPLv2 or later
 
 BeyoungerPay tokenized direct payment gateway for WooCommerce.
@@ -56,9 +56,9 @@ The plugin sends this URL automatically as `notify_url` when creating a transact
 
 Browser callback URL:
 
-The plugin sends the WooCommerce order payment URL as `callback_url`, for example `https://your-domain.com/checkout/order-pay/123/?pay_for_order=true&key=wc_order_xxx`. This lets customers return to the same order and retry payment after backing out of Apple Pay, Google Pay, PayPal, Cash App, Card to crypto, or 3DS flows.
+The plugin sends the WooCommerce order payment URL as `callback_url`, with an order key and a Beyounger return marker. On return, paid orders go to the order received page. Pending orders show a confirmation screen that checks the local WooCommerce order status while waiting for the webhook. Failed orders can be retried from the original order payment page.
 
-If the upstream browser redirect drops WooCommerce's order key but still returns the Beyounger `order_id`, the plugin repairs the callback before WooCommerce renders the page. Paid orders are redirected to the order received page, and unpaid orders are redirected back to the keyed order payment page.
+If the upstream browser redirect drops WooCommerce's order key but still returns a known Beyounger `order_id`, the plugin repairs the callback before WooCommerce renders the page. Credit card payments also work on the keyed order payment page. Each attempted transaction uses a distinct merchant reference; the cart remains available until the order is confirmed paid.
 
 UTM visibility:
 
@@ -217,6 +217,18 @@ Refund:
 `sha256(api_key + request_time + trade_email + transaction_no + amount)`
 
 == Changelog ==
+
+= 1.0.13 =
+* Load the hosted card form when Credit Card is selected in classic and Blocks checkout.
+* Cache daily successful payment totals briefly and refresh them when orders or refunds change.
+* Reduce repeated returning-customer lookups during checkout.
+
+= 1.0.12 =
+* Fix the failed-payment retry link so WooCommerce displays the order payment form.
+* Support hosted credit card payments on the WooCommerce order payment page.
+* Use distinct merchant references for retries and ignore stale failed notifications from earlier attempts.
+* Show a confirmation screen while a returned payment awaits webhook confirmation.
+* Keep the checkout cart until the related order is confirmed paid.
 
 = 1.0.11 =
 * Add separate Standard Customers limits and configurable Credit Card brands.

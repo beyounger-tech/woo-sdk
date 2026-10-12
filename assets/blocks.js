@@ -21,6 +21,8 @@
 		activePlaceholder: null,
 		height: 96,
 		waiters: [],
+		cardForm: null,
+		refreshPromise: null,
 	};
 
 	function getIframeWrapper() {
@@ -141,8 +143,9 @@
 	}
 
 	function requestCardToken( cardForm ) {
-		const iframe = getOrCreateCardIframe( cardForm );
-		const targetOrigin = new URL( cardForm.url ).origin;
+		const activeForm = tokenState.cardForm || cardForm;
+		const iframe = getOrCreateCardIframe( activeForm );
+		const targetOrigin = new URL( activeForm.url ).origin;
 		tokenState.token = '';
 
 		return new Promise( function ( resolve, reject ) {
@@ -166,6 +169,33 @@
 
 			iframe.contentWindow.postMessage( { type: 'beyounger.create_token' }, targetOrigin );
 		} );
+	}
+
+	function refreshCardForm( cardForm ) {
+		if ( tokenState.refreshPromise ) {
+			return tokenState.refreshPromise;
+		}
+		const activeForm = tokenState.cardForm || cardForm;
+		const body = new URLSearchParams( {
+			action: 'beyounger_card_context',
+			nonce: activeForm.refresh_nonce,
+			woo_order_id: String( activeForm.woo_order_id || '' ),
+			woo_order_key: activeForm.woo_order_key || '',
+		} );
+		tokenState.refreshPromise = fetch( activeForm.refresh_url, { method: 'POST', credentials: 'same-origin', body: body } )
+			.then( function ( response ) { return response.json(); } )
+			.then( function ( response ) {
+				if ( ! response.success || ! response.data || ! response.data.url ) {
+					throw new Error( 'Unable to refresh the secure card form.' );
+				}
+				tokenState.cardForm = response.data;
+				tokenState.orderId = response.data.order_id;
+				const cardRadio = document.getElementById( 'radio-control-wc-payment-method-options-beyounger' );
+				if ( ( cardRadio && cardRadio.checked ) || ( ! cardRadio && tokenState.activePlaceholder ) ) {
+					getOrCreateCardIframe( response.data );
+				}
+			} ).finally( function () { tokenState.refreshPromise = null; } );
+		return tokenState.refreshPromise;
 	}
 
 	function createLabel( settings, label ) {
@@ -208,9 +238,12 @@
 					return undefined;
 				}
 
-				getOrCreateCardIframe( cardForm );
-				setCardFrameHeight( tokenState.height );
 				const reposition = function () {
+					const cardRadio = document.getElementById( 'radio-control-wc-payment-method-options-beyounger' );
+					if ( ( cardRadio && cardRadio.checked ) || ( ! cardRadio && containerRef.current && containerRef.current.getClientRects().length ) ) {
+						getOrCreateCardIframe( tokenState.cardForm || cardForm );
+						setCardFrameHeight( tokenState.height );
+					}
 					positionCardFrame( containerRef.current );
 				};
 				const onPaymentMethodChange = function () {
@@ -248,6 +281,7 @@
 					return undefined;
 				}
 
+				tokenState.cardForm = cardForm;
 				tokenState.orderId = cardForm.order_id || '';
 				const allowedOrigins = cardForm.allowed_origins || [ 'https://cashier.beyounger.com' ];
 				const onMessage = function ( event ) {
@@ -286,12 +320,21 @@
 			}, [ cardForm.url, cardForm.order_id ] );
 
 			element.useEffect( function () {
+				if ( ! eventRegistration.onCheckoutFail ) {
+					return undefined;
+				}
+				return eventRegistration.onCheckoutFail( function () {
+					refreshCardForm( cardForm ).catch( function () {} );
+				} );
+			}, [ eventRegistration.onCheckoutFail, cardForm.order_id ] );
+
+			element.useEffect( function () {
 				if ( ! eventRegistration.onPaymentSetup ) {
 					return undefined;
 				}
 
 				return eventRegistration.onPaymentSetup( function () {
-					return requestCardToken( cardForm ).then( function ( token ) {
+					return Promise.resolve( tokenState.refreshPromise ).then( function () { return requestCardToken( cardForm ); } ).then( function ( token ) {
 						return {
 							type: emitResponse.responseTypes && emitResponse.responseTypes.SUCCESS
 								? emitResponse.responseTypes.SUCCESS
