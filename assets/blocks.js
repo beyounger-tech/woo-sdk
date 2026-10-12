@@ -190,7 +190,10 @@
 				}
 				tokenState.cardForm = response.data;
 				tokenState.orderId = response.data.order_id;
-				getOrCreateCardIframe( response.data );
+				const cardRadio = document.getElementById( 'radio-control-wc-payment-method-options-beyounger' );
+				if ( ( cardRadio && cardRadio.checked ) || ( ! cardRadio && tokenState.activePlaceholder ) ) {
+					getOrCreateCardIframe( response.data );
+				}
 			} ).finally( function () { tokenState.refreshPromise = null; } );
 		return tokenState.refreshPromise;
 	}
@@ -235,9 +238,12 @@
 					return undefined;
 				}
 
-				getOrCreateCardIframe( cardForm );
-				setCardFrameHeight( tokenState.height );
 				const reposition = function () {
+					const cardRadio = document.getElementById( 'radio-control-wc-payment-method-options-beyounger' );
+					if ( ( cardRadio && cardRadio.checked ) || ( ! cardRadio && containerRef.current && containerRef.current.getClientRects().length ) ) {
+						getOrCreateCardIframe( tokenState.cardForm || cardForm );
+						setCardFrameHeight( tokenState.height );
+					}
 					positionCardFrame( containerRef.current );
 				};
 				const onPaymentMethodChange = function () {

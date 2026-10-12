@@ -4,7 +4,7 @@ Tags: woocommerce, payment, beyoungerpay
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.12
+Stable tag: 1.0.13
 License: GPLv2 or later
 
 BeyoungerPay tokenized direct payment gateway for WooCommerce.
@@ -217,6 +217,11 @@ Refund:
 `sha256(api_key + request_time + trade_email + transaction_no + amount)`
 
 == Changelog ==
+
+= 1.0.13 =
+* Load the hosted card form when Credit Card is selected in classic and Blocks checkout.
+* Cache daily successful payment totals briefly and refresh them when orders or refunds change.
+* Reduce repeated returning-customer lookups during checkout.
 
 = 1.0.12 =
 * Fix the failed-payment retry link so WooCommerce displays the order payment form.

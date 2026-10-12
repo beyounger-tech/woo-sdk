@@ -3,7 +3,7 @@
  * Plugin Name: Woo Beyounger Payment
  * Plugin URI: https://beyounger.com/
  * Description: BeyoungerPay tokenized direct payment gateway for WooCommerce.
- * Version: 1.0.12
+ * Version: 1.0.13
  * Author: Carter Chen
  * Text Domain: woo-beyounger-payment
  * Domain Path: /languages
@@ -18,7 +18,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.12' );
+define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.13' );
 define( 'WOO_BEYOUNGER_PAYMENT_FILE', __FILE__ );
 define( 'WOO_BEYOUNGER_PAYMENT_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -38,6 +38,24 @@ function woo_beyounger_payment_enqueue_styles() {
 	);
 }
 add_action( 'wp_enqueue_scripts', 'woo_beyounger_payment_enqueue_styles' );
+
+/** Drop checkout limit totals when a Beyounger order or its refunds change. */
+function woo_beyounger_payment_clear_daily_totals( $order_id ) {
+	$order = wc_get_order( $order_id );
+	if ( ! $order ) {
+		return;
+	}
+	$method = (string) $order->get_meta( '_beyounger_payment_method', true );
+	if ( ! in_array( $method, array( 'card', 'paypal', 'google_pay', 'cash_app', 'apple_pay', 'card_to_crypto' ), true ) ) {
+		return;
+	}
+	$today = current_time( 'Ymd' );
+	foreach ( array( 'standard', 'preferred' ) as $group ) {
+		delete_transient( 'beyounger_paid_' . $today . '_' . $method . '_' . $group );
+	}
+}
+add_action( 'woocommerce_order_status_changed', 'woo_beyounger_payment_clear_daily_totals' );
+add_action( 'woocommerce_order_refunded', 'woo_beyounger_payment_clear_daily_totals' );
 
 /**
  * Capture UTM parameters so checkout can still evaluate traffic after redirects.

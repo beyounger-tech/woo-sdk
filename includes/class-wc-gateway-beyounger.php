@@ -679,19 +679,19 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		}
 
 			$pay_order = $this->get_order_pay_order();
-			if ( ! $this->is_standard_channel() && ! $this->passes_utm_gate() && ( ! $pay_order || $pay_order->get_payment_method() !== $this->id ) ) {
-				return false;
-			}
-
 			if ( ! $this->passes_order_amount_gate( $pay_order ) ) {
 				return false;
 			}
 
-			if ( ! $this->passes_daily_successful_payment_limit() ) {
+			if ( ! $this->is_standard_channel() && ! $this->passes_utm_gate() && ( ! $pay_order || $pay_order->get_payment_method() !== $this->id ) ) {
 				return false;
 			}
 
-			return parent::is_available();
+			if ( ! parent::is_available() || ! $this->passes_daily_successful_payment_limit() ) {
+				return false;
+			}
+
+			return true;
 		}
 
 	/**
@@ -719,7 +719,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			return array( 'result' => 'failure' );
 		}
 
-		if ( ! $this->passes_daily_successful_payment_limit() ) {
+		if ( ! $this->passes_daily_successful_payment_limit( true ) ) {
 			wc_add_notice( __( 'This payment method is not available today.', 'woo-beyounger-payment' ), 'error' );
 			return array( 'result' => 'failure' );
 		}
@@ -1022,7 +1022,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		<div class="beyounger-card-form" data-beyounger-card-form="classic">
 			<iframe
 				data-beyounger-card-iframe="1"
-				src="<?php echo esc_url( $context['url'] ); ?>"
+				data-src="<?php echo esc_url( $context['url'] ); ?>"
 				title="<?php echo esc_attr__( 'Secure card form', 'woo-beyounger-payment' ); ?>"
 				style="width:100%;height:96px;border:0;"
 				loading="lazy"
@@ -1042,6 +1042,18 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				window.beyoungerCardTokenWaiters = [];
 				window.beyoungerCardTokenSubmitting = false;
 				window.beyoungerCardRefreshPromise = null;
+				window.beyoungerActivateCardForm = function () {
+					var selected = document.querySelector('form.checkout [name="payment_method"]:checked, form#order_review [name="payment_method"]:checked, form.checkout input[type="hidden"][name="payment_method"], form#order_review input[type="hidden"][name="payment_method"]');
+					if (!selected || selected.value !== 'beyounger') {
+						return;
+					}
+					document.querySelectorAll('[data-beyounger-card-form="classic"] iframe[data-src]').forEach(function (iframe) {
+						iframe.src = iframe.getAttribute('data-src');
+						iframe.removeAttribute('data-src');
+					});
+				};
+				window.beyoungerActivateCardForm();
+				document.addEventListener('change', window.beyoungerActivateCardForm, true);
 				window.beyoungerRefreshCardForm = function () {
 					if (window.beyoungerCardRefreshPromise) {
 						return window.beyoungerCardRefreshPromise;
@@ -1062,7 +1074,10 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 							window.beyoungerCardContext = response.data;
 							document.querySelectorAll('[data-beyounger-card-form="classic"]').forEach(function (container) {
 								var iframe = container.querySelector('iframe');
-								if (iframe) { iframe.src = response.data.url; }
+								if (iframe) {
+									iframe.setAttribute('data-src', response.data.url);
+									window.beyoungerActivateCardForm();
+								}
 								var orderId = container.querySelector('[name="beyounger_card_order_id"]');
 								if (orderId) { orderId.value = response.data.order_id; }
 								container.querySelectorAll('[name="card[token]"], [name="beyounger_card_token"]').forEach(function (field) { field.value = ''; });
@@ -1085,8 +1100,9 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				if (window.beyoungerCardRefreshPromise) {
 					return window.beyoungerCardRefreshPromise.then(function () { return window.beyoungerRequestCardToken(); });
 				}
+					window.beyoungerActivateCardForm();
 					var iframe = document.querySelector('[data-beyounger-card-iframe="1"]');
-					if (!iframe || !iframe.contentWindow) {
+					if (!iframe || !iframe.src || iframe.hasAttribute('data-src') || !iframe.contentWindow) {
 						return Promise.reject(new Error('Secure card form is not ready.'));
 					}
 
@@ -1158,6 +1174,8 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 				});
 				if (window.jQuery) {
 					window.jQuery(function ($) {
+						window.beyoungerActivateCardForm();
+						$(document.body).on('updated_checkout', window.beyoungerActivateCardForm);
 						var payForm = document.querySelector('form#order_review');
 						if (payForm) {
 							payForm.addEventListener('submit', function (event) {
@@ -2051,11 +2069,11 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 * @return bool
 	 */
 	private function passes_utm_gate() {
-		if ( $this->is_eligible_returning_customer() ) {
+		if ( $this->matches_utm_whitelist() ) {
 			return true;
 		}
 
-		return $this->matches_utm_whitelist();
+		return $this->is_eligible_returning_customer();
 	}
 
 	/**
@@ -2126,7 +2144,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 *
 	 * @return bool
 	 */
-	private function passes_daily_successful_payment_limit() {
+	private function passes_daily_successful_payment_limit( $force_refresh = false ) {
 		$is_standard_customer = '2' === $this->get_customer_type_flag();
 		$prefix               = $is_standard_customer ? 'successful_payment_limit_standard_' : 'successful_payment_limit_';
 		$limit                = $this->get_configured_amount( $prefix . $this->variant_key, $is_standard_customer ? '' : '5000' );
@@ -2134,18 +2152,34 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			return true;
 		}
 
-		return $this->get_method_daily_successful_payment_total( $is_standard_customer ) <= $limit;
+		return $this->get_method_daily_successful_payment_total( $is_standard_customer, $limit, $force_refresh ) <= $limit;
 	}
 
 	/**
 	 * Get today's successful paid total for this method and customer group.
 	 *
 	 * @param bool $is_standard_customer Whether to count only CUSTOM_FD14=2 orders.
+	 * @param float $limit Configured daily amount limit.
+	 * @param bool  $force_refresh Recalculate when an order is actually submitted.
 	 * @return float
 	 */
-	private function get_method_daily_successful_payment_total( $is_standard_customer ) {
+	private function get_method_daily_successful_payment_total( $is_standard_customer, $limit, $force_refresh = false ) {
+		// Checkout can ask each gateway for availability multiple times in one request.
+		// Keep the expensive order scan shared across those calls and short lived
+		// across checkout refresh requests.
+		static $request_totals = array();
+		$cache_key = 'beyounger_paid_' . current_time( 'Ymd' ) . '_' . $this->variant_key . '_' . ( $is_standard_customer ? 'standard' : 'preferred' );
+		if ( ! $force_refresh && isset( $request_totals[ $cache_key ] ) && $request_totals[ $cache_key ]['limit'] === $limit ) {
+			return $request_totals[ $cache_key ]['total'];
+		}
+		$cached = $force_refresh ? false : get_transient( $cache_key );
+		if ( is_array( $cached ) && isset( $cached['limit'], $cached['total'] ) && (float) $cached['limit'] === $limit ) {
+			$request_totals[ $cache_key ] = $cached;
+			return (float) $cached['total'];
+		}
+
 		$args = array(
-			'limit'      => -1,
+			'limit'      => 100,
 			'status'     => array( 'wc-processing', 'wc-completed' ),
 			'date_paid'  => $this->get_today_date_range_query(),
 			'meta_key'   => '_beyounger_payment_method',
@@ -2153,17 +2187,26 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			'return'     => 'objects',
 		);
 
-		// Filter in PHP so legacy orders without a flag remain in the preferred group.
-		// This also keeps the grouping identical for HPOS and legacy order storage.
-		$orders = array_filter(
-			wc_get_orders( $args ),
-			static function ( $order ) use ( $is_standard_customer ) {
-				return $order instanceof WC_Order
-					&& ( '2' === (string) $order->get_meta( '_beyounger_cus_fd14', true ) ) === $is_standard_customer;
+		// Legacy orders without a flag belong to the preferred group. Stop as
+		// soon as this method is over its limit; an exact total is unnecessary.
+		$total = 0.0;
+		$page  = 1;
+		do {
+			$args['paged'] = $page++;
+			$orders = wc_get_orders( $args );
+			foreach ( $orders as $order ) {
+				if ( $order instanceof WC_Order && ( '2' === (string) $order->get_meta( '_beyounger_cus_fd14', true ) ) === $is_standard_customer ) {
+					$total += $this->get_order_net_paid_total( $order );
+					if ( $total > $limit ) {
+						break 2;
+					}
+				}
 			}
-		);
+		} while ( count( $orders ) === $args['limit'] );
 
-		return $this->sum_successful_orders( $orders );
+		$request_totals[ $cache_key ] = array( 'limit' => $limit, 'total' => $total );
+		set_transient( $cache_key, $request_totals[ $cache_key ], 5 * MINUTE_IN_SECONDS );
+		return $total;
 	}
 
 	/**
@@ -2215,25 +2258,6 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Sum net paid total for WooCommerce orders.
-	 *
-	 * @param array $orders Orders.
-	 *
-	 * @return float
-	 */
-	private function sum_successful_orders( array $orders ) {
-		$total = 0.0;
-
-		foreach ( $orders as $order ) {
-			if ( $order instanceof WC_Order ) {
-				$total += $this->get_order_net_paid_total( $order );
-			}
-		}
-
-		return $total;
-	}
-
-	/**
 	 * Order total after refunds.
 	 *
 	 * @param WC_Order $order Order.
@@ -2250,6 +2274,7 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 	 * @return bool
 	 */
 	private function is_eligible_returning_customer() {
+		static $eligibility = array();
 		$args       = array(
 			'limit'        => 10,
 			'orderby'      => 'date',
@@ -2268,6 +2293,10 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 		} else {
 			return false;
 		}
+		$cache_key = $customer_id . '|' . $email;
+		if ( isset( $eligibility[ $cache_key ] ) ) {
+			return $eligibility[ $cache_key ];
+		}
 
 		$orders = wc_get_orders( $args );
 
@@ -2279,10 +2308,12 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 
 		foreach ( $orders as $order ) {
 			if ( $order instanceof WC_Order && ! $this->order_has_refund( $order ) ) {
+				$eligibility[ $cache_key ] = true;
 				return true;
 			}
 		}
 
+		$eligibility[ $cache_key ] = false;
 		return false;
 	}
 
