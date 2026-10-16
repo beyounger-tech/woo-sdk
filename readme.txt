@@ -4,7 +4,7 @@ Tags: woocommerce, payment, beyoungerpay
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.13
+Stable tag: 1.0.14
 License: GPLv2 or later
 
 BeyoungerPay tokenized direct payment gateway for WooCommerce.
@@ -217,6 +217,10 @@ Refund:
 `sha256(api_key + request_time + trade_email + transaction_no + amount)`
 
 == Changelog ==
+
+= 1.0.14 =
+* Require a billing phone number when a BeyoungerPay payment method is selected in classic or block checkout.
+* Stop BeyoungerPay payment attempts with a missing billing phone before calling the payment API.
 
 = 1.0.13 =
 * Load the hosted card form when Credit Card is selected in classic and Blocks checkout.

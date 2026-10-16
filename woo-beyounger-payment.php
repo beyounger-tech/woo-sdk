@@ -3,7 +3,7 @@
  * Plugin Name: Woo Beyounger Payment
  * Plugin URI: https://beyounger.com/
  * Description: BeyoungerPay tokenized direct payment gateway for WooCommerce.
- * Version: 1.0.13
+ * Version: 1.0.14
  * Author: Carter Chen
  * Text Domain: woo-beyounger-payment
  * Domain Path: /languages
@@ -18,9 +18,59 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.13' );
+define( 'WOO_BEYOUNGER_PAYMENT_VERSION', '1.0.14' );
 define( 'WOO_BEYOUNGER_PAYMENT_FILE', __FILE__ );
 define( 'WOO_BEYOUNGER_PAYMENT_PATH', plugin_dir_path( __FILE__ ) );
+
+/**
+ * Whether a checkout payment method belongs to BeyoungerPay.
+ *
+ * @param string $method Payment gateway ID.
+ * @return bool
+ */
+function woo_beyounger_payment_is_gateway_method( $method ) {
+	return in_array(
+		$method,
+		array( 'beyounger', 'beyounger_paypal', 'beyounger_google_pay', 'beyounger_cash_app', 'beyounger_apple_pay', 'beyounger_card_to_crypto' ),
+		true
+	);
+}
+
+/**
+ * Validate the billing phone on classic checkout for BeyoungerPay only.
+ *
+ * @param array    $data   Posted checkout data.
+ * @param WP_Error $errors Checkout validation errors.
+ */
+function woo_beyounger_payment_validate_billing_phone( $data, $errors ) {
+	if ( empty( $data['payment_method'] ) || ! woo_beyounger_payment_is_gateway_method( $data['payment_method'] ) ) {
+		return;
+	}
+
+	$phone = isset( $data['billing_phone'] ) ? trim( (string) $data['billing_phone'] ) : '';
+	if ( '' === $phone ) {
+		$errors->add( 'billing_phone_required', __( 'Please enter a billing phone number to use BeyoungerPay.', 'woo-beyounger-payment' ) );
+	}
+}
+
+/**
+ * Validate the billing phone on Checkout Block for BeyoungerPay only.
+ *
+ * @param WC_Order        $order   Checkout order.
+ * @param WP_REST_Request $request Store API checkout request.
+ * @throws Exception When the billing phone is missing.
+ */
+function woo_beyounger_payment_validate_store_api_billing_phone( $order, $request ) {
+	if ( 'POST' !== $request->get_method() || ! woo_beyounger_payment_is_gateway_method( (string) $request->get_param( 'payment_method' ) ) ) {
+		return;
+	}
+
+	$billing = $request->get_param( 'billing_address' );
+	$phone   = is_array( $billing ) && isset( $billing['phone'] ) ? trim( (string) $billing['phone'] ) : '';
+	if ( '' === $phone ) {
+		throw new Exception( __( 'Please enter a billing phone number to use BeyoungerPay.', 'woo-beyounger-payment' ) );
+	}
+}
 
 require_once WOO_BEYOUNGER_PAYMENT_PATH . 'includes/class-beyounger-shipment-sync.php';
 add_action( 'plugins_loaded', array( 'Beyounger_Shipment_Sync', 'init' ), 20 );
@@ -817,6 +867,9 @@ add_action(
 			);
 			return;
 		}
+
+		add_action( 'woocommerce_after_checkout_validation', 'woo_beyounger_payment_validate_billing_phone', 10, 2 );
+		add_action( 'woocommerce_store_api_checkout_update_order_from_request', 'woo_beyounger_payment_validate_store_api_billing_phone', 10, 2 );
 
 		require_once WOO_BEYOUNGER_PAYMENT_PATH . 'includes/class-wc-gateway-beyounger.php';
 

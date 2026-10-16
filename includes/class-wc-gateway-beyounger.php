@@ -714,6 +714,11 @@ class WC_Gateway_Beyounger extends WC_Payment_Gateway {
 			return array( 'result' => 'failure' );
 		}
 
+		if ( '' === trim( (string) $order->get_billing_phone() ) ) {
+			wc_add_notice( __( 'Please enter a billing phone number to use BeyoungerPay.', 'woo-beyounger-payment' ), 'error' );
+			return array( 'result' => 'failure' );
+		}
+
 		if ( ! $this->passes_order_amount_gate( $order ) ) {
 			wc_add_notice( __( 'This payment method is not available for this order amount.', 'woo-beyounger-payment' ), 'error' );
 			return array( 'result' => 'failure' );
